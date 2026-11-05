@@ -1,0 +1,9 @@
+task_name: "rsagent"
+# 数据集在仓库之外：用 --dataset-path 指定，或设置 ONEID_DATA_ROOT。
+dataset_path: null
+num_sample: null
+task_type: "step"
+llm_judge: "deepseek-v4-flash"
+deepseek_api_url: "https://api.deepseek.com/chat/completions"
+generation_config:
+  max_length: 512 

@@ -1,0 +1,82 @@
+name: ObjectMeasureSkill
+display_name: Object Measure Skill
+type: skill
+enabled: true
+
+executor:
+  model: ObjectMeasureSkill
+  worker_name: ObjectMeasureSkill
+  job_name: object_measure_skill
+  script: worker.py
+  port: 20128
+  host: 0.0.0.0
+  calculate_type: control
+  timeout_sec: 180
+
+doc:
+  path: skill.md
+  description: Measure object geometry from provided boxes, selected detections, or previous structured outputs.
+
+inputs:
+  required:
+    - image
+    - target
+    - measure_type
+  optional:
+    - bbox
+    - detections
+    - selected_detections
+    - reference_target
+    - select_a
+    - select_b
+    - gsd_m_per_pixel
+    - unit
+    - visualize
+    - detector
+    - structured
+    - input_registry
+    - normalizer_error
+  defaults:
+    unit: pixel
+    visualize: false
+    detector: auto
+  bindings:
+    image: primary_image
+  allow_extra_args: false
+
+normalizer:
+  name: object_measure
+  module: normalizer.py
+
+routing:
+  keywords:
+    - measure
+    - distance
+    - area
+    - size
+    - gsd
+    - center
+    - centroid
+    - between smallest and largest
+    - 测量
+    - 距离
+    - 面积
+    - 尺寸
+    - 中心点
+    - 像素距离
+    - 实际距离
+    - 最小和最大之间
+  negative_keywords:
+    - sar
+    - cross-modal
+    - poi
+    - geotiff
+    - change
+    - draw only
+    - 跨模态
+    - 兴趣点
+    - 变化
+    - 只画框
+  preferred_inputs:
+    - primary_image
+  required_modalities: []

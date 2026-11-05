@@ -1,0 +1,114 @@
+{
+  "targets": [
+    "aircraft",
+    "bridge",
+    "harbor",
+    "ship",
+    "tank",
+    "vehicle"
+  ],
+  "detection": {
+    "score_threshold": 0.0
+  },
+  "families": {
+    "match": {
+      "image_dir": "H:/1_RSTIBenchMark/match_images",
+      "tool_dir": "H:/1_RSTIBenchMark/match_images/0_tool_json",
+      "truth_dir": "H:/1_RSTIBenchMark/match_images/0_truth_json",
+      "views": {
+        "a": {
+          "tool_suffix": "_RGB",
+          "image_suffix": "_RGB",
+          "modality": "rgb",
+          "time_key": "t0"
+        },
+        "b": {
+          "tool_suffix": "_SAR",
+          "image_suffix": "_SAR",
+          "modality": "sar",
+          "time_key": "t0"
+        }
+      },
+      "image_size": {
+        "mode": "fixed",
+        "width": 1024,
+        "height": 1024
+      },
+      "alpha_a": 0.8,
+      "alpha_b": 0.7,
+      "registration": "identity",
+      "attributes_workbook": "H:/1_RSTIBenchMark/tool_task4_property.xlsx",
+      "context_workbook": "H:/1_RSTIBenchMark/tool_task4_property.xlsx"
+    },
+    "time": {
+      "image_dir": "H:/1_RSTIBenchMark/time_images",
+      "tool_dir": "H:/1_RSTIBenchMark/time_images/0_tool_json",
+      "truth_dir": "H:/1_RSTIBenchMark/time_images/0_truth_json",
+      "views": {
+        "a": {
+          "tool_suffix": "_time1",
+          "image_suffix": "_time1",
+          "modality": "optical",
+          "time_key": "t0"
+        },
+        "b": {
+          "tool_suffix": "_time2",
+          "image_suffix": "_time2",
+          "modality": "optical",
+          "time_key": "t1"
+        }
+      },
+      "image_size": {
+        "mode": "per_image"
+      },
+      "alpha_a": 0.8,
+      "alpha_b": 0.8,
+      "registration": "identity",
+      "association": {
+        "center_scale": 1.5,
+        "gate_score": 0.25
+      },
+      "track_radius_diag_ratio": 1.0,
+      "attributes_workbook": "H:/1_RSTIBenchMark/tool_task5_property.xlsx",
+      "context_workbook": "H:/1_RSTIBenchMark/tool_task5_property.xlsx"
+    }
+  },
+  "time": {
+    "stayed_diag_ratio": 0.5
+  },
+  "nms": {
+    "enabled": true,
+    "iou_threshold": 0.5
+  },
+  "registration": {
+    "mode": "identity",
+    "min_inliers": 8,
+    "max_rotation_deg": 15.0,
+    "max_shift_px": 200.0
+  },
+  "association": {
+    "w_iou": 0.5,
+    "w_center": 0.3,
+    "w_area": 0.2,
+    "center_scale": 0.75,
+    "gate_iou": 0.05,
+    "gate_score": 0.35
+  },
+  "evidence": {
+    "alpha_rgb": 0.8,
+    "alpha_sar": 0.7,
+    "alpha_single": 0.5,
+    "support_weight": 0.5,
+    "unmatched_counter": "vacuous"
+  },
+  "fusion": {
+    "rule": "adaptive",
+    "theta": 0.5,
+    "conflict_fallback": true
+  },
+  "decision": {
+    "accept_betp": 0.5,
+    "abstain_band": 0.0,
+    "score_mode": "betp"
+  }
+}

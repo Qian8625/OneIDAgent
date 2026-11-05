@@ -1,0 +1,247 @@
+# Basic directory configuration — modify this to your local path
+base_dir: ${TOOL_WORKERS_DIR}
+log_folder: ${SERVER_LOG_DIR}
+tools_output_dir: ${TOOLS_OUTPUT_DIR}
+
+partition: "q"
+default_calculate_gpus: 1
+default_calculate_cpus: 16
+default_control_cpus: 2
+default_control_gpus: 0
+retry_interval: 1
+request_timeout: 10
+
+controller_config:
+  worker_name: controller
+  job_name: controller
+  calculate_type: control
+  cmd:
+    script-addr: ${TOOL_WORKERS_DIR}/online_workers/controller.py
+    port: 20001
+    host: "0.0.0.0"
+
+
+tool_worker_config:
+  - Calculator:
+      worker_name: Calculator
+      job_name: calculator
+      calculate_type: control
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/Calculator_worker.py
+        port: 20002
+        host: "0.0.0.0"
+
+  - DrawBox:
+      worker_name: DrawBox
+      job_name: draw_box
+      calculate_type: control
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/DrawBox_worker.py
+        port: 20004
+        host: "0.0.0.0"
+        save_path: ${TOOLS_OUTPUT_DIR}
+
+  - AddText:
+      worker_name: AddText
+      job_name: add_text
+      calculate_type: control
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/AddText_worker.py
+        port: 20005
+        host: "0.0.0.0"
+        save_path: ${TOOLS_OUTPUT_DIR}
+
+  - GoogleSearch:
+      worker_name: GoogleSearch
+      job_name: google_search
+      calculate_type: control
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/GoogleSearch_worker.py
+        port: 20006
+        host: "0.0.0.0"
+        api-key: "ENV"
+
+  - Plot:
+      worker_name: Plot
+      job_name: plot
+      calculate_type: control
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/Plot_worker.py
+        port: 20007
+        host: "0.0.0.0"
+        save_path: ${TOOLS_OUTPUT_DIR}
+
+  - Solver:
+      worker_name: Solver
+      job_name: solver
+      calculate_type: control
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/Solver_worker.py
+        port: 20008
+        host: "0.0.0.0"
+
+  - TextToBbox:
+      worker_name: TextToBbox
+      job_name: text_to_bbox
+      calculate_type: control
+      cuda_visible_devices: "0"
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/TextToBbox_worker.py
+        port: 20009
+        host: "0.0.0.0"
+        model-path: ${TEXT_TO_BBOX_MODEL_PATH}
+        model-config: ${TEXT_TO_BBOX_CONFIG_PATH}
+ 
+  - BaseModel:
+      worker_name: BaseModel
+      job_name: base_model
+      calculate_type: control
+      cuda_visible_devices: "0"    
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/BaseModel_worker.py
+        port: 20010
+        host: "0.0.0.0"
+  
+  - ImageDescription:         
+      worker_name: ImageDescription
+      job_name: image_description
+      calculate_type: control
+      cuda_visible_devices: "0"    
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/ImageDescription_worker.py
+        port: 20011                  
+        host: "0.0.0.0"
+
+  - RegionAttributeDescription:
+      worker_name: RegionAttributeDescription
+      job_name: region_attribute_description
+      calculate_type: control
+      cuda_visible_devices: "0"   
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/RegionAttributeDescription_worker.py
+        port: 20012              
+        host: "0.0.0.0"
+
+  - CountGivenObject:
+      worker_name: CountGivenObject
+      job_name: count_given_object
+      calculate_type: control
+      cuda_visible_devices: "0"    
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/CountGivenObject_worker.py
+        port: 20013
+        host: "0.0.0.0"
+
+  - SegmentObjectPixels:
+      worker_name: SegmentObjectPixels
+      job_name: segment_object_pixels
+      calculate_type: control
+      cuda_visible_devices: "0"    
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/SegmentObjectPixels_worker.py
+        port: 20014
+        host: "0.0.0.0"
+        BaseModel-server: TextToBbox
+        sam_model_path: ${SAM_MODEL_PATH}
+        sam_model_config: ${SAM_MODEL_CONFIG_PATH}
+  
+  - ChangeDetection:
+      worker_name: ChangeDetection
+      job_name: change_detection
+      calculate_type: control
+      conda_env: cd-env
+      cuda_visible_devices: "3"  
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/ChangeDetection_worker.py
+        port: 20015
+        host: "0.0.0.0"
+  
+  - ObjectDetection:
+      worker_name: ObjectDetection
+      job_name: object_detection
+      calculate_type: control
+      conda_env: cd-env
+      cuda_visible_devices: "3"
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/ObjectDetection_worker.py
+        port: 20016
+        host: "0.0.0.0"
+        model-path: ${OBJECT_DETECTION_MODEL_PATH}
+        model-config: ${OBJECT_DETECTION_CONFIG_PATH}
+        
+  - GetAreaBoundary:
+      worker_name: GetAreaBoundary
+      job_name: get_area_boundary
+      calculate_type: control
+      conda_env: tool1
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/GetAreaBoundary_worker.py
+        port: 20017
+        host: "0.0.0.0"
+        save_path: ${TOOLS_OUTPUT_DIR}
+
+  - AddPoisLayer:
+      worker_name: AddPoisLayer
+      job_name: add_pois_layer
+      calculate_type: control
+      conda_env: tool1
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/AddPoisLayer_worker.py
+        port: 20018
+        host: "0.0.0.0"
+
+
+  - ComputeDistance:
+      worker_name: ComputeDistance
+      job_name: compute_distance
+      calculate_type: control
+      conda_env: tool1
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/ComputeDistance_worker.py
+        port: 20019
+        host: "0.0.0.0"
+  
+  - SkillExecutor:
+      worker_name: SkillExecutor
+      job_name: skill_executor
+      calculate_type: control
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/SkillExecutor_worker.py
+        port: 20032
+        host: "0.0.0.0"
+
+  - SmallObjectDetection:
+      worker_name: SmallObjectDetection
+      job_name: small_object_detection
+      calculate_type: control
+      conda_env: cd-env
+      cuda_visible_devices: "3"
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/SmallObjectDetection_worker.py
+        port: 20033
+        host: "0.0.0.0"
+        model-path: ${SMALL_OBJECT_DETECTION_MODEL_PATH}
+
+  - DenoDetV2:
+      worker_name: DenoDetV2
+      job_name: denodet_v2
+      calculate_type: control
+      conda_env: cd-env
+      cuda_visible_devices: "3"
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/DenoDetV2_worker.py
+        model-path: ${DENO_DET_V2_MODEL_PATH}
+        model-config: ${DENO_DET_V2_CONFIG_PATH}
+        denodet-code-dir: ${DENO_DET_V2_CODE_DIR}
+        port: 20034
+        host: "0.0.0.0"
+
+  - CrossModalInterpret:
+      worker_name: CrossModalInterpret
+      job_name: cross_modal_interpret
+      calculate_type: control
+      wait_for_self: true
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/CrossModalInterpret_worker.py
+        port: 20035
+        host: "0.0.0.0"

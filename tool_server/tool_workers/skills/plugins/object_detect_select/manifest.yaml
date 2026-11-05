@@ -1,0 +1,90 @@
+name: ObjectDetectSelectSkill
+display_name: Object Detect Select Skill
+type: skill
+enabled: true
+
+executor:
+  model: ObjectDetectSelectSkill
+  worker_name: ObjectDetectSelectSkill
+  job_name: object_detect_select_skill
+  script: worker.py
+  port: 20127
+  host: 0.0.0.0
+  calculate_type: control
+  timeout_sec: 240
+
+doc:
+  path: skill.md
+  description: Detect candidate targets in a training image and select final targets by a selection rule.
+
+inputs:
+  required:
+    - image
+    - target
+    - selection_mode
+  optional:
+    - top_k
+    - confidence_threshold
+    - iou_threshold
+    - detector
+    - visualize
+    - max_draw
+    - nth
+  defaults:
+    top_k: 1
+    confidence_threshold: 0.25
+    iou_threshold: 0.5
+    detector: auto
+    visualize: true
+    max_draw: 20
+  bindings:
+    image: primary_image
+  allow_extra_args: false
+
+normalizer:
+  name: object_detect_select
+  module: normalizer.py
+
+routing:
+  keywords:
+    - detect
+    - locate
+    - find
+    - select
+    - smallest
+    - largest
+    - nearest
+    - leftmost
+    - rightmost
+    - top
+    - bottom
+    - 检测
+    - 定位
+    - 找出
+    - 选择
+    - 最小
+    - 最大
+    - 最近
+    - 最左
+    - 最右
+    - 最上
+    - 最下
+  negative_keywords:
+    - distance
+    - area
+    - gsd
+    - measure
+    - sar
+    - cross-modal
+    - geotiff
+    - poi
+    - change
+    - 距离
+    - 面积
+    - 测量
+    - 跨模态
+    - 变化
+    - 兴趣点
+  preferred_inputs:
+    - primary_image
+  required_modalities: []

@@ -1,0 +1,84 @@
+skill_name: ObjectMeasureSkill
+enabled: true
+tests:
+  - name: distance_two_bboxes_with_gsd
+    required_fixture_refs:
+      - rgb_image
+    params:
+      image: "$rgb_image"
+      target: storage tank
+      measure_type: pair_distance
+      bbox:
+        - [0, 0, 10, 10]
+        - [30, 40, 40, 50]
+      gsd_m_per_pixel: 0.5
+      unit: meter
+    expect:
+      error_code: 0
+      structured:
+        status: success
+        unit: meter
+      measurement:
+        distance_px: 50.0
+        distance_m: 25.0
+  - name: area_one_bbox_with_gsd
+    required_fixture_refs:
+      - rgb_image
+    params:
+      image: "$rgb_image"
+      target: airplane
+      measure_type: area
+      bbox: [10, 20, 30, 50]
+      gsd_m_per_pixel: 0.25
+      unit: meter
+    expect:
+      error_code: 0
+      structured:
+        status: success
+        unit: meter
+      measurement:
+        area_px: 600.0
+        area_m2: 37.5
+  - name: missing_gsd_returns_pixel_unit
+    required_fixture_refs:
+      - rgb_image
+    params:
+      image: "$rgb_image"
+      target: vehicle
+      measure_type: area
+      bbox: [10, 20, 30, 50]
+      unit: meter
+    expect:
+      error_code: 0
+      structured:
+        status: missing_gsd
+        unit: pixel
+      measurement:
+        area_px: 600.0
+  - name: smallest_largest_pair_distance
+    required_fixture_refs:
+      - rgb_image
+    params:
+      image: "$rgb_image"
+      target: storage tank
+      measure_type: pair_distance
+      detections:
+        - bbox: [0, 0, 10, 10]
+          score: 0.9
+          label: tank
+          rank: 1
+        - bbox: [20, 20, 50, 50]
+          score: 0.8
+          label: tank
+          rank: 2
+      select_a: smallest
+      select_b: largest
+      gsd_m_per_pixel: 1.0
+    expect:
+      error_code: 0
+      structured:
+        status: success
+        unit: meter
+      measurement:
+        distance_px: 42.4264068712
+        distance_m: 42.4264068712

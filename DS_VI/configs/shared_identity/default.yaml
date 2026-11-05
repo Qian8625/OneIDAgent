@@ -1,0 +1,243 @@
+# Shared-identity truth discovery configuration.
+#
+# Every threshold used by the candidate graph, the joint A-Q inference, the
+# reliability model, provenance grouping, and the decision layer lives here.
+# Nothing in oneid_agent/shared_identity/ hardcodes these values.
+schema_version: "1.0"
+
+physical:
+  # Canonical diagnostic-score weights. Must sum to 1.0.
+  weights:
+    iou: 0.45
+    center: 0.30
+    area: 0.15
+    confidence: 0.10
+  # Fraction of the larger box diagonal used to normalize center distance.
+  center_scale_factor: 0.75
+  # High-recall admissibility gates. An edge is admissible when ANY gate passes.
+  gates:
+    low_iou_gate: 0.05
+    center_gate: 0.25
+    geo_gate_m: 250.0
+    max_center_distance_px: null
+  # Probability mass reserved for "no object" on every observation row.
+  null_prior: 0.15
+  # Physical prior of paper Eq.(2): p[m,k] ~ exp(d^T f[m,k]), with
+  # d = prior_scale * weights and d_null = null_logit (null -> derived from
+  # null_prior and prior_scale so a perfect single candidate keeps 15% NULL).
+  prior_scale: 6.0
+  null_logit: null
+  # Cap on admissible real-object candidates per observation (NULL is exempt).
+  max_candidates_per_observation: 12
+
+association:
+  # Candidate identities are formed only between related image groups.  The
+  # legacy graph remains available explicitly for old datasets without scope
+  # metadata.
+  mode: cross_image_independent
+  strict_scope: true
+  forbid_same_image: true
+  # One pair identity can receive one observation from each related image.
+  pair_capacity: null
+
+inference:
+  # Temperature on the claim-evidence term when updating A.
+  eta: 1.5
+  max_iter: 50
+  tol: 1.0e-5
+  epsilon: 1.0e-12
+  # Iterative KL scaling parameters for the capacity projection.
+  projection:
+    max_iter: 100
+    tol: 1.0e-6
+  # Default capacity of a real object: how many observations may claim it.
+  # Paper Eq.(29) caps capacity per acquisition/channel block (block_capacity),
+  # not per object column.  null = unconstrained.
+  default_capacity: null
+  # When false the capacity constraint is dropped entirely (every real-object
+  # column becomes unconstrained, the projection only re-normalizes and masks).
+  # This is what the capacity ablation toggles; do not emulate "off" by editing
+  # default_capacity, which only changes the cap value.
+  capacity_projection: true
+  # Explicit legacy mode. Paper block mode requires acquisition/channel metadata.
+  capacity_mode: block_object_column
+  # Keep the automatic image-block switch for scoped cross-image problems. Set
+  # false only when explicitly comparing global versus block capacity.
+  auto_block_scoped_capacity: true
+  block_capacity: 1.0
+  # Uniform prior weight added to every truth value domain.
+  truth_prior_smoothing: 1.0
+  # Robustness knobs. All defaults are neutral: they reproduce the pre-revision
+  # numbers exactly, so enabling one is always an explicit experimental choice.
+  # Cap on |contribution| of a single claim to one A cell (null = uncapped).
+  # Bounds how far one confident-but-wrong claim can move a shared identity row.
+  evidence_cap: null
+  # Multiplier on the truth->association evidence term. 1.0 keeps the current
+  # feedback loop; 0.0 makes A depend on the physical prior alone (the B1 path).
+  feedback_damping: 1.0
+  # Optional subset of attributes allowed to feed Q evidence back into A.
+  # null means all available attributes; [] means no attribute feedback.
+  feedback_attributes: null
+  # Attributes that cannot change between views; pooling them keeps a
+  # cross-view pair from splitting its evidence over two time cells.
+  time_invariant_attributes: []
+
+reliability:
+  # Fixed per (modality, attribute) reliabilities. NEVER derived from detector
+  # confidence, match score, or association probability.
+  # ``orientation`` cells come from the property-workbook evaluation
+  # (accuracy among filled predictions): optical 0.24, sar 0.63. The optical
+  # channel is below the 1/3 chance level of a 3-value domain; the likelihood
+  # keeps the sign, so the claim acts as evidence *against* the reported value
+  # instead of being flattened to uninformative. It is therefore excluded from
+  # the consistency gate bellow but kept in the likelihood.
+  # anti-informative.
+  default: 0.70
+  by_modality_attribute:
+    optical:
+      category: 0.88
+      subtype: 0.72
+      heading: 0.65
+      orientation: 0.24
+    sar:
+      category: 0.78
+      subtype: 0.60
+      heading: 0.55
+      orientation: 0.63
+    temporal:
+      presence: 0.80
+      motion: 0.70
+      orientation: 0.21
+    cross_modal:
+      category: 0.82
+      subtype: 0.66
+      heading: 0.60
+      orientation: 0.24
+  # Hard clamp so a single claim can never become a logical certainty.
+  min: 0.35
+  max: 0.97
+  # Shrink every reliability toward 0.5 (no information): r' = 0.5 + s*(r-0.5),
+  # applied before the clamp. s=1.0 uses the table as-is; smaller s trades the
+  # empirical accuracy of the table for robustness in the A/Q feedback loop.
+  # Fit s on a validation split, never on the test split.
+  shrinkage: 1.0
+  # Whether shrinkage (and the [min, max] clamp) also applies to cells produced
+  # by the contextual theta artifact.  The sigmoid is bounded by construction, so
+  # this is off by default and theta cells keep the fitted values; turning it on
+  # changes attribute-arm numbers, so enable it deliberately and re-baseline.
+  shrinkage_applies_to_theta: false
+  # Probability that a claim is an outlier that carries no information about the
+  # truth: P'(y|v) = (1-e)*P(y|v) + e/C. 0.0 reproduces the pure symmetric noise
+  # model; a positive value bounds the damage a single corrupted claim can do.
+  outlier_mixture: 0.0
+  # Contextual sigmoid calibration.  config_path loads a per-(modality,
+  # attribute) table; theta_path loads a fitted Eq.(3) artifact with
+  # (source, attribute) intercepts and per-attribute context coefficients.
+  # Theta takes precedence when both are set.
+  contextual:
+    enabled: false
+    config_path: null
+    theta_path: null
+
+provenance:
+  # Total weight budget shared by all claims in one derivation group.
+  group_budget: 1.0
+  # Exact replay of the same tool on the same input contributes only once.
+  dedup_exact_replay: true
+  # Group construction: connected_component (paper A.19: claims connected by
+  # same primitive, shared raw-input root, or explicit derivation path), root
+  # (shared roots only), or observation (legacy per-observation budget).
+  grouping_mode: connected_component
+  # Exclude explicitly declared deterministic restatements from the likelihood.
+  # Detection is metadata-driven, never inferred from equal claim values.
+  remove_deterministic_restatements: true
+  # Disable group normalization independently of replay deduplication.
+  budget_enabled: true
+
+cascade:
+  # VI object output: an observation whose best real-object association stays
+  # below this threshold is emitted as a single-view detection (view_a_only /
+  # view_b_only), so the VI arm can represent left / appeared changes and
+  # recover detections the D-S handoff left unmatched.
+  residual_threshold: 0.5
+  # Candidate reach per class when VI runs alone. time needs a wider reach than
+  # match because moved targets can sit far from their previous position.
+  max_links:
+    match: 4
+    time: 6
+  # Fraction of the larger diagonal used to normalize center distance in the
+  # VI cross-view candidates. time mirrors the D-S association scale (1.5).
+  center_scale_factor:
+    match: 0.75
+    time: 1.5
+
+decision:
+  identity_threshold: 0.60
+  truth_threshold: 0.60
+  qualified_truth_threshold: 0.40
+  # Scale on which the two truth thresholds are compared.
+  # absolute: the posterior probability, as shipped.
+  # uniform_lift: p * |domain|, i.e. how many times more mass the top value
+  #   carries than one value of a uniform distribution over the attribute's
+  #   value_domains. Additive truth_prior_smoothing keeps absolute posteriors
+  #   in a narrow band that differs by domain size, so a single absolute
+  #   threshold is unreachable for large domains; lift is invariant to it.
+  #   The threshold keys keep their names and are read as lift values.
+  truth_scale: absolute
+  # Above this association entropy (nats) identity is reported as ambiguous.
+  ambiguity_entropy: 0.90
+  # Minimum fraction of expected modality/time cells that must be observed.
+  min_coverage: 0.50
+  # NULL mass above this level means the object is not really supported.
+  max_null_mass: 0.60
+  contradiction_margin: 0.15
+
+acquisition:
+  association_entropy_trigger: 0.60
+  truth_entropy_trigger: 0.60
+  max_requests: 5
+
+value_domains:
+  # subtype / state / size_bin mirror the annotation vocabulary declared in
+  # scripts/data/build_annotation_workbook.py ENUMS. They are the label space the
+  # annotators could choose from, not values read off the evaluation gold, and
+  # they must cover every gold value: a gold value outside the domain gives the
+  # truth variable no room for the right answer and makes strict NLL undefined.
+  category: ["vehicle", "tank", "ship", "aircraft", "bridge", "harbor", "other"]
+  subtype:
+    [
+      "civilian_airliner",
+      "military_aircraft",
+      "small_aircraft",
+      "cargo_ship",
+      "fishing_boat",
+      "warship",
+      "small_boat",
+      "storage_tank",
+      "oil_tank",
+      "road_bridge",
+      "rail_bridge",
+      "pier",
+      "dock",
+      "car",
+      "truck",
+      "bus",
+      "unknown",
+    ]
+  state:
+    [
+      "moving",
+      "static",
+      "moored",
+      "parked",
+      "under_construction",
+      "damaged",
+      "occluded",
+      "unknown",
+    ]
+  size_bin: ["small", "medium", "large", "unknown"]
+  heading: ["north", "east", "south", "west", "unknown"]
+  # Image-plane orientation as the tools report it; distinct from heading.
+  orientation: ["horizontal", "vertical", "diagonal"]
+  presence: ["present", "absent"]
+  motion: ["static", "moving", "unknown"]

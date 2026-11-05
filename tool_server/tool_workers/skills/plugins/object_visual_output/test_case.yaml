@@ -1,0 +1,63 @@
+skill_name: ObjectVisualOutputSkill
+enabled: true
+tests:
+  - name: draw_single_bbox
+    required_fixture_refs:
+      - rgb_image
+    params:
+      image: "$rgb_image"
+      visual_type: box
+      bbox: [10, 20, 60, 80]
+      color: red
+      thickness: 2
+    expect:
+      error_code: 0
+      output_path_exists: true
+      structured:
+        status: success
+        num_visual_objects: 1
+  - name: draw_multiple_selected_detections
+    required_fixture_refs:
+      - rgb_image
+    params:
+      image: "$rgb_image"
+      visual_type: box_and_label
+      selected_detections:
+        - bbox: [10, 20, 60, 80]
+          label: tank_a
+        - bbox: [100, 120, 160, 180]
+          label: tank_b
+      max_draw: 20
+    expect:
+      error_code: 0
+      output_path_exists: true
+      structured:
+        status: success
+        num_visual_objects: 2
+  - name: plot_centroid_point
+    required_fixture_refs:
+      - rgb_image
+    params:
+      image: "$rgb_image"
+      visual_type: plot
+      points:
+        - [35, 50]
+      labels:
+        - centroid
+    expect:
+      error_code: 0
+      output_path_exists: true
+      structured:
+        status: success
+        num_visual_objects: 1
+  - name: missing_visual_target
+    required_fixture_refs:
+      - rgb_image
+    params:
+      image: "$rgb_image"
+      visual_type: box
+    expect:
+      error_code: 0
+      structured:
+        status: missing_visual_target
+        num_visual_objects: 0

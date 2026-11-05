@@ -1,0 +1,99 @@
+cases:
+  - name: strong_match_high_iou
+    inputs:
+      rgb_image: examples/optical_ship.png
+      sar_image: examples/sar_ship.png
+      target: ship
+      rgb_detections:
+        - bbox: [10, 10, 60, 60]
+          score: 0.9
+          label: ship
+      sar_candidates:
+        - bbox: [12, 12, 62, 62]
+          score: 0.8
+          label: ship
+      visualize: false
+    expect:
+      error_code: 0
+      matched_pairs.0.match_type: strong_match
+      match_summary.matched_count: 1
+      match_summary.dedup_count: 1
+
+  - name: weak_match_center_supported
+    inputs:
+      rgb_image: examples/optical_vehicle.png
+      sar_image: examples/sar_vehicle.png
+      target: vehicle
+      rgb_detections:
+        - bbox: [10, 10, 50, 50]
+          score: 0.9
+          label: vehicle
+      sar_candidates:
+        - bbox: [20, 20, 60, 60]
+          score: 0.8
+          label: vehicle
+      iou_threshold: 0.5
+      center_distance_threshold: 40
+      match_strategy: hybrid
+      visualize: false
+    expect:
+      error_code: 0
+      matched_pairs.0.match_type: weak_match
+      match_summary.matched_count: 1
+
+  - name: rgb_only_candidate
+    inputs:
+      rgb_image: examples/optical_ship.png
+      sar_image: examples/sar_ship.png
+      target: ship
+      rgb_detections:
+        - bbox: [10, 10, 60, 60]
+          score: 0.9
+          label: ship
+      sar_candidates: []
+      visualize: false
+    expect:
+      error_code: 0
+      match_summary.matched_count: 0
+      match_summary.rgb_only_count: 1
+      match_summary.dedup_count: 1
+
+  - name: sar_only_candidate
+    inputs:
+      rgb_image: examples/optical_ship.png
+      sar_image: examples/sar_ship.png
+      target: ship
+      rgb_detections: []
+      sar_candidates:
+        - bbox: [100, 80, 140, 118]
+          score: 0.77
+          label: ship
+      visualize: false
+    expect:
+      error_code: 0
+      match_summary.matched_count: 0
+      match_summary.sar_only_count: 1
+      match_summary.dedup_count: 1
+
+  - name: dense_targets_no_reused_sar
+    inputs:
+      rgb_image: examples/optical_dense.png
+      sar_image: examples/sar_dense.png
+      target: ship
+      rgb_detections:
+        - bbox: [10, 10, 50, 50]
+          score: 0.9
+          label: ship
+        - bbox: [12, 12, 52, 52]
+          score: 0.85
+          label: ship
+      sar_candidates:
+        - bbox: [11, 11, 51, 51]
+          score: 0.88
+          label: ship
+      visualize: false
+    expect:
+      error_code: 0
+      match_summary.matched_count: 1
+      match_summary.rgb_only_count: 1
+      unique_sar_assignment: true

@@ -1,0 +1,97 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.codex
+.codex/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.egg-info/
+build/
+dist/
+unsloth_compiled_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+gee_key/
+data/gee_key/
+
+# Logs
+*.log
+
+# Temp code
+tempcode/
+app/BackUp/
+app/gradio_tmp/
+tools_guide/
+
+# Large local datasets
+/data/
+/RS_data/
+/database/
+
+# Model checkpoints / weights
+/sft_train/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+/models/
+!tool_server/tf_eval/models/
+tool_server/tf_eval/models/*
+!tool_server/tf_eval/models/openai.py
+
+# Runtime caches / outputs
+tool_server/tf_eval/results/
+tool_server/tf_eval/scripts/logs/
+tool_server/tool_workers/cache/
+tool_server/tool_workers/cache_dir/
+tool_server/tool_workers/logs/
+tool_server/tool_workers/tools_output/
+tool_server/tool_workers/online_workers/controller_addr/
+tool_server/tool_workers/mask_*.png
+tool_server/tool_workers/symbology-style.db
+tool_server/tool_workers/~/
+
+# GIS sidecar files
+*.aux.xml
+*.gpkg-shm
+*.gpkg-wal
+
+# Local generated images / GIS artifacts
+*.png
+*.tif
+*.tiff
+*.gpkg
+
+# Markdown documentation is intentionally trackable.
+/outputs/
+/env_exports/
+
+# Local run artifacts
+/logs/
+/outputs/
+tools_output/
+
+.e2e_tmp/
+
+# Manuscript PDFs are not distributed (double-blind review).
+docs/*.pdf

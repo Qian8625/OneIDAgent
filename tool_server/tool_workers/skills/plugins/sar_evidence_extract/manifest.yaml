@@ -1,0 +1,94 @@
+name: SAREvidenceExtractSkill
+display_name: SAR Evidence Extract Skill
+type: skill
+enabled: true
+
+executor:
+  model: SAREvidenceExtractSkill
+  worker_name: SAREvidenceExtractSkill
+  job_name: sar_evidence_extract_skill
+  script: worker.py
+  port: 20130
+  host: 0.0.0.0
+  calculate_type: control
+  timeout_sec: 300
+
+doc:
+  path: skill.md
+  description: Extract SAR-only target evidence candidates, response statistics, and visual artifacts.
+
+inputs:
+  required:
+    - sar_image
+    - target
+  optional:
+    - preprocess_mode
+    - confidence_threshold
+    - response_threshold
+    - min_area
+    - max_area
+    - visualize
+    - max_candidates
+    - max_draw
+    - detector
+  defaults:
+    preprocess_mode: auto
+    confidence_threshold: 0.25
+    response_threshold: auto
+    visualize: true
+    max_candidates: 50
+    max_draw: 50
+    detector: auto
+  bindings:
+    sar_image: sar_image
+  allow_extra_args: false
+
+normalizer:
+  name: sar_evidence_extract
+  module: normalizer.py
+
+routing:
+  keywords:
+    - sar evidence
+    - sar response
+    - scattering
+    - scatterer
+    - bright spot
+    - candidate extraction
+    - radar evidence
+    - denodet
+    - sar candidate
+    - 雷达证据
+    - sar证据
+    - sar响应
+    - 散射
+    - 强散射
+    - 亮斑
+    - 候选目标
+    - 候选框
+  negative_keywords:
+    - rgb
+    - optical
+    - cross-modal
+    - confirm
+    - match
+    - fusion
+    - distance
+    - area
+    - measure
+    - geotiff
+    - poi
+    - change
+    - 光学
+    - 跨模态
+    - 确认
+    - 匹配
+    - 融合
+    - 距离
+    - 面积
+    - 测量
+    - 变化
+  preferred_inputs:
+    - sar_image
+  required_modalities:
+    - sar

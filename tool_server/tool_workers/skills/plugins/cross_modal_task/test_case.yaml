@@ -1,0 +1,102 @@
+cases:
+  - name: optical_sar_verify_supported
+    inputs:
+      rgb_image: examples/optical_ship.png
+      sar_image: examples/sar_ship.png
+      target: ship
+      task_type: optical_sar_verify
+      matched_pairs:
+        - rgb_bbox: [10, 10, 60, 60]
+          sar_bbox: [12, 12, 62, 62]
+          match_score: 0.82
+          iou: 0.7
+          match_type: strong_iou_match
+          rgb_label: ship
+          sar_label: ship
+      visualize: false
+    expect:
+      error_code: 0
+      task_result.label: supported
+      structured.status: success
+      evidence.required: true
+
+  - name: optical_sar_verify_unsupported
+    inputs:
+      rgb_image: examples/optical_ship.png
+      sar_image: examples/sar_ship.png
+      target: ship
+      task_type: optical_sar_verify
+      rgb_detections:
+        - bbox: [10, 10, 60, 60]
+          score: 0.74
+          label: ship
+      sar_candidates: []
+      visualize: false
+    expect:
+      error_code: 0
+      task_result.label: unsupported
+      structured.status:
+        in:
+          - success
+          - insufficient_evidence
+      evidence.required: true
+
+  - name: sar_optical_attribution
+    inputs:
+      rgb_image: examples/optical_aircraft.png
+      sar_image: examples/sar_aircraft.png
+      target: aircraft
+      task_type: sar_optical_attribution
+      matched_pairs:
+        - rgb_bbox: [20, 20, 80, 80]
+          sar_bbox: [22, 22, 82, 82]
+          match_score: 0.76
+          center_score: 0.9
+          match_type: center_supported_match
+          rgb_label: aircraft
+          sar_label: aircraft
+      visualize: false
+    expect:
+      error_code: 0
+      task_result.label: attributed
+      structured.status: success
+      evidence.required: true
+
+  - name: sar_candidate_recall
+    inputs:
+      rgb_image: examples/optical_ship.png
+      sar_image: examples/sar_ship.png
+      target: ship
+      task_type: sar_candidate_recall
+      sar_only:
+        - sar_bbox: [100, 80, 140, 118]
+          sar_score: 0.77
+          sar_label: ship
+      confidence_threshold: 0.3
+      visualize: false
+    expect:
+      error_code: 0
+      task_result.label: recalled
+      structured.status: success
+      evidence.required: true
+
+  - name: optical_sar_consistency_inconsistent
+    inputs:
+      rgb_image: examples/optical_vehicle.png
+      sar_image: examples/sar_vehicle.png
+      target: vehicle
+      task_type: optical_sar_consistency
+      matched_pairs:
+        - rgb_bbox: [5, 5, 30, 30]
+          sar_bbox: [90, 90, 120, 120]
+          match_score: 0.08
+          iou: 0.0
+          center_score: 0.1
+          rgb_label: vehicle
+          sar_label: ship
+      visualize: false
+    expect:
+      error_code: 0
+      task_result.label: inconsistent
+      structured.status: success
+      evidence.required: true

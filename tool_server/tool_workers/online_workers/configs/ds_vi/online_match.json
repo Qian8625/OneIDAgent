@@ -1,0 +1,71 @@
+{
+  "targets": [
+    "aircraft",
+    "bridge",
+    "harbor",
+    "ship",
+    "tank",
+    "vehicle"
+  ],
+  "detection": {
+    "score_threshold": 0.0
+  },
+  "families": {
+    "match": {
+      "views": {
+        "a": {
+          "modality": "rgb",
+          "time_key": "t0"
+        },
+        "b": {
+          "modality": "sar",
+          "time_key": "t0"
+        }
+      },
+      "image_size": {
+        "mode": "per_image"
+      },
+      "alpha_a": 0.8,
+      "alpha_b": 0.7,
+      "registration": "identity"
+    }
+  },
+  "time": {
+    "stayed_diag_ratio": 0.5
+  },
+  "nms": {
+    "enabled": true,
+    "iou_threshold": 0.5
+  },
+  "registration": {
+    "mode": "identity",
+    "min_inliers": 8,
+    "max_rotation_deg": 15.0,
+    "max_shift_px": 200.0
+  },
+  "association": {
+    "w_iou": 0.5,
+    "w_center": 0.3,
+    "w_area": 0.2,
+    "center_scale": 0.75,
+    "gate_iou": 0.05,
+    "gate_score": 0.35
+  },
+  "evidence": {
+    "alpha_rgb": 0.8,
+    "alpha_sar": 0.7,
+    "alpha_single": 0.5,
+    "support_weight": 0.5,
+    "unmatched_counter": "vacuous"
+  },
+  "fusion": {
+    "rule": "adaptive",
+    "theta": 0.5,
+    "conflict_fallback": true
+  },
+  "decision": {
+    "accept_betp": 0.5,
+    "abstain_band": 0.0,
+    "score_mode": "betp"
+  }
+}

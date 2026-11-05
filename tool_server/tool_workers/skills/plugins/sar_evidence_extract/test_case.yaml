@@ -1,0 +1,62 @@
+cases:
+  - name: extract_ship_sar_candidates
+    inputs:
+      sar_image: examples/sar_ship.png
+      target: ship
+      confidence_threshold: 0.25
+      response_threshold: auto
+      visualize: true
+      max_candidates: 20
+    expect:
+      error_code: 0
+      structured.status:
+        in:
+          - success
+          - no_sar_response
+      output_keys:
+        - text
+        - error_code
+        - sar_candidates
+        - structured
+        - artifacts
+
+  - name: no_fabricated_candidates_when_threshold_high
+    inputs:
+      sar_image: examples/sar_ship.png
+      target: ship
+      confidence_threshold: 0.99
+      visualize: false
+      max_candidates: 10
+    expect:
+      error_code: 0
+      structured.status:
+        in:
+          - success
+          - no_sar_response
+      no_fabricated_candidates: true
+
+  - name: response_threshold_filters_candidates
+    inputs:
+      sar_image: examples/sar_aircraft.png
+      target: aircraft
+      confidence_threshold: 0.25
+      response_threshold: 0.8
+      visualize: true
+      max_candidates: 50
+    expect:
+      error_code: 0
+      structured.status:
+        in:
+          - success
+          - no_sar_response
+
+  - name: max_candidates_limit
+    inputs:
+      sar_image: examples/sar_scene.png
+      target: ship
+      confidence_threshold: 0.1
+      visualize: false
+      max_candidates: 3
+    expect:
+      error_code: 0
+      max_sar_candidates: 3

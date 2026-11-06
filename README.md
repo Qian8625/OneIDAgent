@@ -49,21 +49,7 @@ This repository contains the agent runtime, the tool service, the DS+VI engine, 
 
 OneID keeps planning and execution apart. The agent plans, the controller dispatches, and each tool is one worker process that can live in its own conda environment. That split matters here: segmentation, change detection and detection workers need mutually incompatible dependency pins.
 
-```
-agent  (app/app.py · scripts/chat/chat.py · tool_server/tf_eval)
-  │ tool calls (JSON)                        ▲ observations
-  ▼                                          │
-controller (:20001) ──── HTTP ────▶ tool workers (one process per tool)
-  │                                 ObjectDetection · DenoDetV2 ·
-  │                                 ChangeDetection · SegmentObjectPixels · GIS …
-  └── skills ──▶ CrossModalMatchSkill · CrossModalTaskSkill · …
-                          │
-                          ▼
-              CrossModalInterpret ──▶ DS+VI
-                                      ├─ ds_fusion        D-S pairing + physical priors
-                                      ├─ shared_identity  joint A/Q inference + evidence state
-                                      └─ cascade          object assembly + output policy
-```
+![Architecture Diagram](docs/Architecture.jpg)
 
 Every worker exposes the same three endpoints — `POST /worker_generate`, `POST /tool_instruction`, `POST /worker_get_status` — so the agent loop does not change when a tool is added. Skills are multi-tool procedures registered the same way; the agent can call `CrossModalMatchSkill` without knowing which workers it drives.
 

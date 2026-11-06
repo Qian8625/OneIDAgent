@@ -1,7 +1,7 @@
 """Shared-identity truth discovery layer for OneID.
 
 An object-level evidence reasoning layer sitting on top of the existing
-perception workers and skills:
+perception workers:
 
 .. code-block:: text
 

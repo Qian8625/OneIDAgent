@@ -127,10 +127,10 @@ def test_fingerprint_differs_when_input_roots_differ():
 
 def test_fingerprint_ignores_input_root_ordering():
     roots_forward = compute_evidence_fingerprint(
-        "CrossModalMatchSkill", {}, input_roots=["/opt.png", "/sar.png"]
+        "CrossModalInterpret", {}, input_roots=["/opt.png", "/sar.png"]
     )
     roots_reversed = compute_evidence_fingerprint(
-        "CrossModalMatchSkill", {}, input_roots=["/sar.png", "/opt.png"]
+        "CrossModalInterpret", {}, input_roots=["/sar.png", "/opt.png"]
     )
 
     # Root order is an artifact of dict iteration in the caller, not evidence.
@@ -241,7 +241,7 @@ def test_roots_of_traces_a_derivation_chain_back_to_the_input_root():
     graph.register("img", "input", "ImageLoader", "fp_img", input_roots=["/data/scene.png"])
     graph.register("det", "observation", "ObjectDetection", "fp_det", parents=["img"])
     graph.register("crop", "observation", "CropTool", "fp_crop", parents=["det"])
-    graph.register("attr", "claim", "AttributeSkill", "fp_attr", parents=["crop"])
+    graph.register("attr", "claim", "AttributeTool", "fp_attr", parents=["crop"])
 
     # Only the image node declares the root; the claim four hops downstream must
     # still resolve to it, because that is how correlated evidence is detected.
@@ -253,9 +253,9 @@ def test_roots_of_merges_multiple_roots_without_duplicating_them():
     graph = ProvenanceGraph()
     graph.register("opt", "input", "Loader", "fp_opt", input_roots=["/opt.png"])
     graph.register("sar", "input", "Loader", "fp_sar", input_roots=["/sar.png"])
-    graph.register("match", "observation", "CrossModalMatchSkill", "fp_m", parents=["opt", "sar"])
+    graph.register("match", "observation", "CrossModalInterpret", "fp_m", parents=["opt", "sar"])
     # A second path back to the same optical root must not double-list it.
-    graph.register("claim", "claim", "AttributeSkill", "fp_c", parents=["match", "opt"])
+    graph.register("claim", "claim", "AttributeTool", "fp_c", parents=["match", "opt"])
 
     assert sorted(graph.roots_of("claim")) == ["/opt.png", "/sar.png"]
     assert len(graph.roots_of("claim")) == 2

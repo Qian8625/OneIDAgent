@@ -13,7 +13,6 @@ from ..utils.utils import *
 from ..utils.log_utils import get_logger
 from ...tool_workers.tool_manager.base_manager import ToolManager
 from ...tool_workers.cache_manager.base_cache_manager import CacheManager
-from ...tool_workers.skills.registry import SKILL_REGISTRY
 MAX_TOOL_TEXT_CHARS = 1200
 
 import torch.distributed as dist
@@ -32,7 +31,6 @@ class BaseToolInferencer(object):
         controller_addr: str = "http://0.0.0.0:20001",
         cache_dir: str | None = None,
         save_dir: str | None = None,
-        disable_skills: bool = False,
     ):
         self.accelerator = Accelerator()
         self.tp_model = tp_model
@@ -56,16 +54,10 @@ class BaseToolInferencer(object):
         )
         self.tool_manager = ToolManager()
         self.save_dir = save_dir
-        self.disable_skills = disable_skills
         if self.save_dir:
             os.makedirs(self.save_dir, exist_ok=True)
         self.cache_manager = CacheManager(cache_dir,save_dir)
         self.available_models = self.tool_manager.available_tools
-        if self.disable_skills:
-            self.available_models = [
-                tool for tool in self.available_models
-                if tool != "SkillExecutor" and tool not in SKILL_REGISTRY
-            ]
         logger.info(f"{len(self.available_models)} available models: {self.available_models}")
 
     def _resolve_image_ref(self, images, ref=None, item_img=None, default_index=0):
@@ -240,13 +232,6 @@ class BaseToolInferencer(object):
                     assert len(tool_cfg) == 1, "Only one tool is supported for now, but got: {}".format(tool_cfg)
                     api_name = tool_cfg[0].get("API_name", tool_cfg[0].get("api_name", ""))
 
-                    if self.disable_skills and (api_name == "SkillExecutor" or api_name in SKILL_REGISTRY):
-                        logger.info(f"API_name {api_name} is disabled in no-skill evaluation.")
-                        item.tool_response.append(dict(
-                            text=f"{api_name} is disabled in no-skill e2e evaluation. Use raw tools directly.",
-                            error_code=1,
-                        ))
-                        continue
 
                     if api_name not in self.available_models:
                         if api_name == "Terminate":

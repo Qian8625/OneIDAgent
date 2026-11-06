@@ -19,7 +19,6 @@ CI = Path(__file__).resolve().parent
 SUITES = {
     "static": "e2e_static.py",
     "worker": "e2e_worker.py",
-    "skill": "e2e_skill_chain.py",
     "ui": "e2e_ui.py",
 }
 

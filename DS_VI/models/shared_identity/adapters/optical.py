@@ -24,7 +24,6 @@ class OpticalAdapter(BaseAdapter):
 
     tool_names = (
         "ObjectDetection",
-        "ObjectDetectSelectSkill",
         "TextToBbox",
         "BaseModel",
     )

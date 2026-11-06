@@ -1,7 +1,6 @@
 import os
 import requests
 
-from tool_server.tool_workers.skills.registry import SKILL_REGISTRY, SKILL_TIMEOUTS
 from ..offline_workers import offline_tool_workers, get_tool_generate_fn
 from tool_server.utils.utils import load_json_file
 from tool_server.utils.server_utils import build_logger
@@ -27,14 +26,12 @@ CORE_EXPECTED_ONLINE_TOOLS = [
     'GetAreaBoundary',
     'AddPoisLayer',
     'ComputeDistance',
-    'SkillExecutor',
     'SmallObjectDetection',
     'DenoDetV2',
     'CrossModalInterpret',
 ]
 
-INTERNAL_SKILL_WORKERS = sorted(SKILL_REGISTRY.keys())
-EXPECTED_ONLINE_TOOLS = CORE_EXPECTED_ONLINE_TOOLS + INTERNAL_SKILL_WORKERS
+EXPECTED_ONLINE_TOOLS = CORE_EXPECTED_ONLINE_TOOLS
 
 logger = build_logger("tool_manager")
 class TimeoutException(Exception): pass
@@ -51,13 +48,7 @@ class ToolManager(object):
         logger.info(f"ToolManager is initialized.")
         self.internal_available_tools = self.available_offline_tools + self.available_online_tools
 
-        self.agent_available_tools = (
-            self.available_offline_tools
-            + [
-                tool for tool in self.available_online_tools
-                if tool not in SKILL_REGISTRY
-            ]
-        )
+        self.agent_available_tools = self.available_offline_tools + self.available_online_tools
 
         self.available_tools = self.agent_available_tools
         self.headers = {"User-Agent": "Client"}
@@ -166,14 +157,6 @@ class ToolManager(object):
     def _resolve_timeout_sec(self, tool_name, params):
         params = params or {}
 
-
-        if tool_name == "SkillExecutor":
-            skill_name = params.get("skill_name")
-            skill_timeout = SKILL_TIMEOUTS.get(skill_name)
-            if skill_timeout is not None:
-                return int(skill_timeout) + 30
-            return 270
-
         if tool_name in ["AddPoisLayer", "ComputeDistance"]:
             return 180
 
@@ -186,10 +169,6 @@ class ToolManager(object):
 
         if tool_name in ["ObjectDetection"]:
             return 600
-
-        if tool_name in SKILL_TIMEOUTS:
-            return int(SKILL_TIMEOUTS[tool_name])
-
         return 60
 
     def call_tool(self,tool_name,params):

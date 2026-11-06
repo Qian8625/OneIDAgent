@@ -105,7 +105,7 @@ def test_matched_pair_is_split_into_two_observations_plus_a_relation():
     store = EvidenceStore()
 
     new_ids = store.ingest_tool_response(
-        "CrossModalMatchSkill", matched_pair_response(), api_args=CROSS_MODAL_ARGS, round_id=0
+        "CrossModalInterpret", matched_pair_response(), api_args=CROSS_MODAL_ARGS, round_id=0
     )
 
     # The fused pair must never be stored as one pre-committed match: it becomes
@@ -127,7 +127,7 @@ def test_matched_pair_is_split_into_two_observations_plus_a_relation():
 def test_split_pair_observations_carry_their_own_modality_specific_roots():
     store = EvidenceStore()
     store.ingest_tool_response(
-        "CrossModalMatchSkill", matched_pair_response(), api_args=CROSS_MODAL_ARGS
+        "CrossModalInterpret", matched_pair_response(), api_args=CROSS_MODAL_ARGS
     )
 
     by_modality = {o.modality: o for o in store.observations.values()}
@@ -141,7 +141,7 @@ def test_split_pair_observations_carry_their_own_modality_specific_roots():
 def test_same_scene_relation_links_the_two_split_observations():
     store = EvidenceStore()
     store.ingest_tool_response(
-        "CrossModalMatchSkill", matched_pair_response(), api_args=CROSS_MODAL_ARGS
+        "CrossModalInterpret", matched_pair_response(), api_args=CROSS_MODAL_ARGS
     )
     relation = next(iter(store.relations.values()))
     by_modality = {o.modality: o.observation_id for o in store.observations.values()}
@@ -154,7 +154,7 @@ def test_same_scene_relation_links_the_two_split_observations():
 def test_split_pair_produces_one_claim_per_constituent_observation():
     store = EvidenceStore()
     store.ingest_tool_response(
-        "CrossModalMatchSkill", matched_pair_response(), api_args=CROSS_MODAL_ARGS
+        "CrossModalInterpret", matched_pair_response(), api_args=CROSS_MODAL_ARGS
     )
 
     # Each claim hangs off exactly one observation; there is no fused claim that
@@ -404,7 +404,7 @@ def test_different_detections_from_the_same_image_add_observations():
 def test_coverage_is_keyed_by_modality_and_time():
     store = EvidenceStore()
     store.ingest_tool_response(
-        "CrossModalMatchSkill", matched_pair_response(), api_args=CROSS_MODAL_ARGS
+        "CrossModalInterpret", matched_pair_response(), api_args=CROSS_MODAL_ARGS
     )
 
     # One cell per (modality|time_key): this is the grid the acquisition layer
@@ -465,7 +465,7 @@ def test_recompute_coverage_is_derived_from_the_deduplicated_observation_set():
 def test_stats_reports_every_accumulated_quantity():
     store = EvidenceStore()
     store.ingest_tool_response(
-        "CrossModalMatchSkill", matched_pair_response(), api_args=CROSS_MODAL_ARGS
+        "CrossModalInterpret", matched_pair_response(), api_args=CROSS_MODAL_ARGS
     )
     store.run_inference()
 
@@ -516,7 +516,7 @@ def test_stats_duplicate_ingests_tracks_replays():
 def test_round_trip_preserves_observations_claims_objects_and_relations():
     store = EvidenceStore()
     store.ingest_tool_response(
-        "CrossModalMatchSkill", matched_pair_response(), api_args=CROSS_MODAL_ARGS
+        "CrossModalInterpret", matched_pair_response(), api_args=CROSS_MODAL_ARGS
     )
     store.run_inference()
 
@@ -534,7 +534,7 @@ def test_round_trip_preserves_observations_claims_objects_and_relations():
 def test_round_trip_preserves_observation_and_relation_content():
     store = EvidenceStore()
     store.ingest_tool_response(
-        "CrossModalMatchSkill", matched_pair_response(), api_args=CROSS_MODAL_ARGS
+        "CrossModalInterpret", matched_pair_response(), api_args=CROSS_MODAL_ARGS
     )
     restored = store_from_dict(json.loads(json.dumps(store_to_dict(store))), EvidenceStore)
 
@@ -918,7 +918,7 @@ def test_register_object_is_preserved_by_seeding():
 def test_build_problem_validates_and_carries_capacities():
     store = EvidenceStore()
     store.ingest_tool_response(
-        "CrossModalMatchSkill", matched_pair_response(), api_args=CROSS_MODAL_ARGS
+        "CrossModalInterpret", matched_pair_response(), api_args=CROSS_MODAL_ARGS
     )
 
     problem = store.build_problem()

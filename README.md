@@ -39,9 +39,9 @@ This repository contains the agent runtime, the tool service, the DS+VI engine, 
 
 ## 📢 Latest Updates
 
-- **Nov-05-2026** Initial release: agent runtime, tool service (21 online tools + 2 in-process GeoTIFF tools), six skills, DS+VI engine, Gradio UI, CLI chat loop, evaluation and SFT scripts.
+- **Nov-05-2026** Initial release: agent runtime, tool service (20 online tools + 2 in-process GeoTIFF tools), DS+VI engine, Gradio UI, CLI chat loop, evaluation and SFT scripts.
 - **Nov-05-2026** Ground-truth construction frozen in [`scripts/eval/gt_protocol.py`](scripts/eval/gt_protocol.py) (`GT_PROTOCOL_VERSION = "1.0"`); the version is stamped into every evaluation run.
-- **Nov-05-2026** Contract tests, four end-to-end suites and the tool-smoke harness added; `skill → controller → tool` is exercised over real HTTP.
+- **Nov-05-2026** Contract tests, three end-to-end suites and the tool-smoke harness added; `tool → controller → worker` is exercised over real HTTP.
 
 ---
 
@@ -51,7 +51,7 @@ OneID keeps planning and execution apart. The agent plans, the controller dispat
 
 ![Architecture Diagram](docs/Architecture.jpg)
 
-Every worker exposes the same three endpoints — `POST /worker_generate`, `POST /tool_instruction`, `POST /worker_get_status` — so the agent loop does not change when a tool is added. Skills are multi-tool procedures registered the same way; the agent can call `CrossModalMatchSkill` without knowing which workers it drives.
+Every worker exposes the same three endpoints — `POST /worker_generate`, `POST /tool_instruction`, `POST /worker_get_status` — so the agent loop does not change when a tool is added.
 
 ### 🧰 Tool registry
 
@@ -63,9 +63,6 @@ Every worker exposes the same three endpoints — `POST /worker_generate`, `POST
 | Interpretation | `ImageDescription`, `RegionAttributeDescription`, `BaseModel` |
 | Cross-modal | `CrossModalInterpret` |
 | Drawing & utilities | `DrawBox`, `AddText`, `Plot`, `Calculator`, `Solver`, `GoogleSearch` |
-| Orchestration | `SkillExecutor` |
-
-Skills: `CrossModalMatchSkill` (target-level RGB/SAR pairing), `CrossModalTaskSkill` (task-level reasoning over matching evidence), `ObjectDetectSelectSkill`, `ObjectMeasureSkill`, `ObjectVisualOutputSkill`, `SAREvidenceExtractSkill`.
 
 Checkpoints are wired through `tool_server/utils/paths.py` (`OBJECT_DETECTION_*`, `SAM_*`, `TEXT_TO_BBOX_*`, `CHANGE_DETECTION_MODEL_BASE`, `DENO_DET_V2_*`, …).
 
@@ -74,12 +71,12 @@ Checkpoints are wired through `tool_server/utils/paths.py` (`OBJECT_DETECTION_*`
 | Path | Contents |
 | --- | --- |
 | `app/` | Gradio application (`app/app.py`, port 4444) |
-| `tool_server/tool_workers/` | Worker implementations, controller, skills and the tool manager |
+| `tool_server/tool_workers/` | Worker implementations, controller and the tool manager |
 | `tool_server/tf_eval/` | Agent runtime, prompt building, trajectory tasks, evaluator |
 | `DS_VI/` | `models/ds_fusion` (D-S pairing), `models/shared_identity` (evidence inference), `models/cascade` (assembly), `models/cross_modal` (task outputs), `models/opt` (optional OT association) |
 | `scripts/eval/` | Evaluation entry points and the frozen GT protocol |
-| `scripts/ci/` | Contract runner and the four end-to-end suites |
-| `scripts/tools_test/` | One test case per registered tool and skill |
+| `scripts/ci/` | Contract runner and the three end-to-end suites |
+| `scripts/tools_test/` | One test case per registered tool |
 | `tests/contract/` | Public `CrossModalInterpret` contract and evidence-pipeline tests |
 | `docs/` | Extra developer documentation (`docs/development.md`) |
 
@@ -127,7 +124,6 @@ Evaluation runs at two granularities.
 | --- | --- | --- |
 | Step-by-step | `scripts/eval/eval_step.sh` | next-action quality over n steps from the full interaction history; tools are not executed |
 | End-to-end | `scripts/eval/eval_e2e.sh` | full autonomous loop against the live controller and worker pool: tool choice, argument binding, recovery |
-| Skill ablation | `scripts/eval/skill_eval/skill_eval.sh` | `no_skill` / `auto_skill` / `oracle_skill` on identical trajectories |
 
 **Cross-modal interpretation** (`scripts/eval/eval_multisource_detection.py`):
 
@@ -235,7 +231,7 @@ The launcher brings up the controller on `:20001` and every configured worker, t
 
 ```bash
 python scripts/tools_test/0_tools_test_all.py --list     # what will run
-python scripts/tools_test/0_tools_test_all.py --all      # one case per tool and skill
+python scripts/tools_test/0_tools_test_all.py --all      # one case per tool
 python scripts/tools_test/0_tools_test_all.py --tool CrossModalInterpret
 ```
 
@@ -279,8 +275,7 @@ $ONEID_DATA_ROOT/
 │   ├── task5_*.png                 # temporal pairs
 │   ├── 0_tool_json/
 │   └── 0_truth_json/
-├── test.jsonl                      # end-to-end trajectory split
-└── test_skill.jsonl                # skill-ablation split
+└── test.jsonl                      # end-to-end trajectory split
 ```
 
 - `match_images/` drives the optical–SAR tasks (`crosscheck_exists`, `select_largest`, `distance_largest_smallest`, `joint_scene`).
@@ -305,10 +300,9 @@ export ONEID_DATA_ROOT=/path/to/oneid-data
 
 bash scripts/eval/eval_step.sh               # step-by-step, GLM-4-9B backbone by default
 bash scripts/eval/eval_e2e.sh                # end-to-end, needs the controller on :20001
-bash scripts/eval/skill_eval/skill_eval.sh   # no_skill / auto_skill / oracle_skill
 ```
 
-All three read their split from the task config, so set `dataset_path` in `tool_server/tf_eval/tasks/rsagent/config.yaml` (shipped as `null`) before the first run. They are configured through `MODEL_PATH`, `MAX_ROUNDS`, `CONTROLLER_ADDR`, `CUDA_VISIBLE_DEVICES` and `OUTPUT_ROOT`, and write checkpoints, logs and results under `outputs/`. The `*_api.sh` variants run the same regimes against hosted backbones; `eval_step_glm.sh` and `eval_step_internlm3.sh` pin local ones.
+Both scripts read their split from the task config, so set `dataset_path` in `tool_server/tf_eval/tasks/rsagent/config.yaml` (shipped as `null`) before the first run. They are configured through `MODEL_PATH`, `MAX_ROUNDS`, `CONTROLLER_ADDR`, `CUDA_VISIBLE_DEVICES` and `OUTPUT_ROOT`, and write checkpoints, logs and results under `outputs/`. The `*_api.sh` variants run the same regimes against hosted backbones; `eval_step_glm.sh` and `eval_step_internlm3.sh` pin local ones.
 
 Object-level interpretation evaluation, with no service and no LLM:
 
@@ -363,13 +357,12 @@ python scripts/ci/run_e2e.py
 python scripts/ci/run_e2e.py --only worker                 # one suite
 ```
 
-`scripts/ci/run_e2e.py` drives four independent suites; each exits non-zero on failure and can run alone.
+`scripts/ci/run_e2e.py` drives three independent suites; each exits non-zero on failure and can run alone.
 
 | Suite | What it proves |
 | --- | --- |
 | `e2e_static.py` | bundled CJK font renders, every sample image referenced by the UI exists, the header is OneID, exactly one UI entry point |
 | `e2e_worker.py` | `AddText` renders Chinese through the bundled font; `CrossModalInterpret` runs the shared-identity chain over real HTTP |
-| `e2e_skill_chain.py` | `skill → controller → tool`: `CrossModalMatchSkill` resolves the interpret worker through the controller and returns VI-scored pairs |
 | `e2e_ui.py` | `app/app.py` starts and serves the OneID header (needs a Python with `gradio`) |
 
 Workers use the interpreter in `ONEID_E2E_PYTHON`, the UI suite `ONEID_E2E_UI_PYTHON`; ports are overridable through `ONEID_E2E_*_PORT` (see `scripts/ci/e2e_common.py`). An interpreter without `gradio` makes the UI suite skip instead of fail.

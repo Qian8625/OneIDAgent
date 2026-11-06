@@ -23,9 +23,6 @@ from tool_server.tool_workers.cross_modal_evidence import (
 )
 from tool_server.tf_eval.utils.rs_agent_prompt import RS_AGENT_PROMPT
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from tool_server.tool_workers.skills.router import route_skills
-from tool_server.tool_workers.skills.catalog import build_selected_skill_catalog
-from tool_server.tool_workers.skills.registry import SKILL_INPUT_BINDINGS, SKILL_REGISTRY
 from tool_server.utils.paths import PROJECT_ROOT as REPO_ROOT, env_path
 from data_preprocess import convert_tif_to_png
 
@@ -529,24 +526,6 @@ def inject_runtime_arguments(api_name, api_args, registry, current_gpkg):
     except Exception:
         return dict(api_args or {})
 
-def inject_skill_runtime_arguments(api_args, registry):
-    try:
-        merged = dict(api_args or {})
-        skill_name = merged.get("skill_name")
-        if not skill_name:
-            return merged
-
-        for arg_name, registry_key in SKILL_INPUT_BINDINGS.get(skill_name, {}).items():
-            if merged.get(arg_name) in [None, ""] and registry.get(registry_key):
-                merged[arg_name] = registry[registry_key]
-
-        if "input_registry" not in merged:
-            merged["input_registry"] = registry
-
-        return merged
-    except Exception:
-        return dict(api_args or {})
-
 def register_artifact(registry, artifact_id, path, artifact_type, tool_name):
     if not path:
         return registry
@@ -700,11 +679,6 @@ def update_registry_with_tool_response(registry, api_name, tool_resp, round_id=N
 
         # RGB/SAR detection registry: single implementation shared with the eval side.
         registry = register_detections(registry, api_name, tool_resp.get("structured"), round_id)
-        # SkillExecutor is the only public skill runtime.
-        # Do not let app.py parse legacy fields from concrete skill workers.
-        if api_name == "SkillExecutor":
-            return registry
-
         # 2) Legacy fallback for raw tools only.
         visual = detect_output_visual(tool_resp)
         if visual:
@@ -863,12 +837,6 @@ def is_tool_available(tool_name: str) -> bool:
         return False
 
 
-def is_skill_executor_available() -> bool:
-    try:
-        return is_tool_available("SkillExecutor")
-    except Exception:
-        return False
-
 def normalize_tool_response(tool_resp, api_name):
     if isinstance(tool_resp, dict):
         return tool_resp
@@ -906,53 +874,8 @@ def run_agent(user_question, *flat_args):
     current_gpkg = None
     chat_msgs = [{"role": "user", "content": user_question}]
 
-    skill_executor_available = is_skill_executor_available()
-
-    candidate_skills = []
-    if skill_executor_available:
-        candidate_skills = route_skills(
-            user_query=user_question,
-            input_registry=registry,
-            top_k=3,
-            min_score=2.5,
-            score_margin=0.5,
-        )
-
-    selected_skill_prompt = build_selected_skill_catalog(candidate_skills)
-
     initial_message = build_initial_user_message(user_question, registry)
     conversation = [{"role": "user", "content": initial_message}]
-
-    if not skill_executor_available:
-        chat_msgs.append(
-            {
-                "role": "assistant",
-                "content": (
-                    "[Round 0] 🧭 SkillRouter\n"
-                    "SkillExecutor worker is unavailable. Fall back to raw tools only."
-                ),
-            }
-        )
-    elif candidate_skills:
-        router_text = "\n".join(
-            [
-                f"- {item['skill_name']} (score={item['score']:.2f}) | reasons: {'; '.join(item.get('reasons', []))}"
-                for item in candidate_skills
-            ]
-        )
-        chat_msgs.append(
-            {
-                "role": "assistant",
-                "content": f"[Round 0] 🧭 SkillRouter\nCandidate skills:\n{router_text}",
-            }
-        )
-    else:
-        chat_msgs.append(
-            {
-                "role": "assistant",
-                "content": "[Round 0] 🧭 SkillRouter\nNo suitable skill matched. Fall back to raw tools if needed.",
-            }
-        )
 
     def emit(download_path=None):
         return render_chat_html(chat_msgs), download_path
@@ -968,7 +891,7 @@ def run_agent(user_question, *flat_args):
 
     for round_id in range(1, MAX_TOOL_ROUNDS + 1):
         try:
-            model_output = model.generate(conversation, extra_system_prompt=selected_skill_prompt)
+            model_output = model.generate(conversation)
         except Exception as exc:
             chat_msgs.append(
                 {
@@ -995,37 +918,6 @@ def run_agent(user_question, *flat_args):
         raw_args = action.get("arguments", {})
         api_args = raw_args if isinstance(raw_args, dict) else {}
         api_args = resolve_argument_references(api_args, registry)  
-
-        if api_name in SKILL_REGISTRY:
-            api_args = dict(api_args or {})
-            api_args["skill_name"] = api_name
-            api_args["input_registry"] = registry
-            api_name = "SkillExecutor"
-            
-        if api_name == "SkillExecutor" and not skill_executor_available:
-            chat_msgs.append(
-                {
-                    "role": "assistant",
-                    "content": (
-                        f"[Round {round_id}] ❌ Observation\n"
-                        "SkillExecutor is unavailable because its worker is not registered. "
-                        "Use raw tools directly."
-                    ),
-                }
-            )
-            yield emit(None)
-
-            conversation.append({"role": "assistant", "content": model_output})
-            conversation.append(
-                {
-                    "role": "user",
-                    "content": (
-                        "SkillExecutor is unavailable in the current runtime. "
-                        "Please select a raw tool from the tool list and continue."
-                    ),
-                }
-            )
-            continue
 
         unresolved_refs = find_unresolved_references(api_args)
         if unresolved_refs:
@@ -1075,62 +967,6 @@ def run_agent(user_question, *flat_args):
         injected_args = inject_runtime_arguments(api_name, api_args, registry, current_gpkg)
         if api_name == "CrossModalInterpret":
             injected_args, _dependency_error = prepare_interpret_args(injected_args, registry)
-
-        if api_name == "SkillExecutor":
-            if not candidate_skills:
-                chat_msgs.append(
-                    {
-                        "role": "assistant",
-                        "content": (
-                            f"[Round {round_id}] ❌ Observation\n"
-                            "There are currently no available skills matched. "
-                            "Please do not use SkillExecutor, but directly select the appropriate raw tools."
-                        ),
-                    }
-                )
-                yield emit(None)
-                conversation.append({"role": "assistant", "content": model_output})
-                conversation.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "No suitable skill is available for this task. "
-                            "Do not use SkillExecutor. "
-                            "Please choose raw tools directly from the tool list and continue."
-                        ),
-                    }
-                )
-                continue
-
-            if not injected_args.get("skill_name"):
-                injected_args["skill_name"] = candidate_skills[0]["skill_name"]
-
-            selected_skill_names = {item["skill_name"] for item in candidate_skills}
-            if injected_args.get("skill_name") not in selected_skill_names:
-                chat_msgs.append(
-                    {
-                        "role": "assistant",
-                        "content": (
-                            f"[Round {round_id}] ❌ Observation\n"
-                            f"SkillExecutor requested unavailable skill: {injected_args.get('skill_name')}. "
-                            f"Available selected skills: {', '.join(sorted(selected_skill_names))}."
-                        ),
-                    }
-                )
-                yield emit(None)
-                conversation.append({"role": "assistant", "content": model_output})
-                conversation.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "The requested skill_name is not in the Selected Skills list. "
-                            "Use one of the selected skills only, or choose raw tools directly."
-                        ),
-                    }
-                )
-                continue
-
-            injected_args = inject_skill_runtime_arguments(injected_args, registry)
 
         action_media = collect_action_input_media(injected_args)
         chat_msgs.append(
@@ -2341,40 +2177,6 @@ with gr.Blocks(**blocks_kwargs) as demo:
                                         inputs=example_inputs,
                                         preprocess=False,
                                     )
-                                with gr.Tab("Skill Test"):
-                                    gr.Examples(
-                                        examples=[
-                                            make_example(
-                                                "[ObjectDetectSelectSkill] Detect all red cars in this image and visualize the selected detections.",
-                                                primary_image="./scripts/tools_test/tools_test_images/1.jpg",
-                                            ),
-                                            make_example(
-                                                "[ObjectMeasureSkill] Measure the area of the red car using the detected bounding box and visualize the measurement.",
-                                                primary_image="./scripts/tools_test/tools_test_images/1.jpg",
-                                            ),
-                                            make_example(
-                                                "[ObjectVisualOutputSkill] Draw a red box for the bbox (289, 645, 330, 724) and label it as red car.",
-                                                primary_image="./scripts/tools_test/tools_test_images/1.jpg",
-                                            ),
-                                            make_example(
-                                                "[SAREvidenceExtractSkill] Extract SAR evidence candidates for ships and visualize the strongest responses.",
-                                                sar_image="./assets/samples/match_sar.jpg",
-                                            ),
-                                            make_example(
-                                                "[CrossModalMatchSkill] Match ship targets between the optical image and SAR image, then show matched and modality-only candidates.",
-                                                optical_image="./assets/samples/match_rgb.jpg",
-                                                sar_image="./assets/samples/match_sar.jpg",
-                                            ),
-                                            make_example(
-                                                "[CrossModalTaskSkill] Verify with SAR evidence whether the ship targets in the optical image are credible and summarize the decision.",
-                                                optical_image="./assets/samples/match_rgb.jpg",
-                                                sar_image="./assets/samples/match_sar.jpg",
-                                            ),
-                                        ],
-                                        inputs=example_inputs,
-                                        preprocess=False,
-                                    )
-
         # Right rail
         with gr.Column(elem_id="right-rail", elem_classes=["rail-stack"]):
             with gr.Column(elem_classes=["panel-card", "right-bottom-card", "panel-fill"]):

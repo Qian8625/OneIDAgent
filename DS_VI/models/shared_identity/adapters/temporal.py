@@ -56,7 +56,7 @@ def _collect(response: Mapping[str, Any], *keys: str) -> List[Dict[str, Any]]:
 class TemporalAdapter(BaseAdapter):
     """Convert change-detection output into temporal observations and relations."""
 
-    tool_names = ("ChangeDetection", "ChangeDetectionSkill", "TemporalChange")
+    tool_names = ("ChangeDetection", "TemporalChange")
     modality = Modality.TEMPORAL.value
 
     def to_observations(

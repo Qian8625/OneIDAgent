@@ -645,7 +645,7 @@ def test_real_store_agrees_with_the_hand_built_supported_branch():
     """
     store = EvidenceStore()
     store.ingest_tool_response(
-        "CrossModalMatchSkill",
+        "CrossModalInterpret",
         {
             "error_code": 0,
             "matched_pairs": [

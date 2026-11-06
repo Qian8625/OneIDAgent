@@ -128,7 +128,7 @@ class ReliabilityModel:
         contextual = dict(section.get("contextual") or {})
         self.contextual_enabled = bool(contextual.get("enabled", False))
         # Relative artifact paths resolve against the project root, never the
-        # process working directory: the controller and the skill workers are
+        # process working directory: the controller and the tool workers are
         # started from different places and must load the same frozen artifact.
         raw_config_path = contextual.get("config_path")
         raw_theta_path = contextual.get("theta_path")

@@ -21,15 +21,6 @@ KEY_FIELDS = [
     "download_path",
 ]
 
-SKILL_EXECUTOR_FIELDS = [
-    "skill_name",
-    "executor_model",
-    "measurement",
-    "artifacts",
-    "download_path",
-]
-
-
 def _json_safe(value: Any) -> Any:
     try:
         json.dumps(value, ensure_ascii=False)
@@ -140,12 +131,6 @@ def extract_structured_result(
         value = tool_resp.get(key)
         if _has_content(value):
             result[key] = value
-
-    if tool_resp.get("skill_name") or tool_resp.get("executor_model"):
-        for key in SKILL_EXECUTOR_FIELDS:
-            value = tool_resp.get(key)
-            if _has_content(value):
-                result[key] = value
 
     if not result:
         return {}

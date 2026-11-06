@@ -20,7 +20,7 @@ class SARAdapter(BaseAdapter):
 
     # DenoDetV2 is the SAR target detector (trained on SARDet-100K); it must
     # register as SAR evidence, never as optical.
-    tool_names = ("SAREvidenceExtractSkill", "SARToRGB", "SARDetection", "DenoDetV2")
+    tool_names = ("SARToRGB", "SARDetection", "DenoDetV2")
     modality = Modality.SAR.value
 
     def to_observations(

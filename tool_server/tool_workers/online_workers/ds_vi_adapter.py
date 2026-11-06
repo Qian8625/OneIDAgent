@@ -354,7 +354,7 @@ def _dedup_entries(
     """Translate cascade objects into the legacy ``dedup_detections`` schema.
 
     ``match_score`` carries the cascade score (VI blend probability), which is
-    the field downstream skills compare against a threshold (plan G3).
+    the field downstream consumers compare against a threshold (plan G3).
     """
     by_view: Dict[str, Dict[int, Mapping[str, Any]]] = {"a": {}, "b": {}}
     for view in ("a", "b"):

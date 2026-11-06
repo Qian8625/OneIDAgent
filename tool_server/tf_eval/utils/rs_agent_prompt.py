@@ -22,7 +22,6 @@ You are a remote sensing assistant specialized in solving geospatial reasoning t
 - DisplayOnGeotiff: Render one or more GeoPackage layers (with feature names) directly over a given GeoTIFF. Example: {"name":"DisplayOnGeotiff","arguments":{"gpkg":"gpkg_1","layers":["hospitals"],"geotiff":"tif_1"}}
 - DenoDetV2: Detect SAR targets and return boxes, labels, and confidences. Supports closed-set categories: ship, aircraft, car, tank, bridge, harbor. Example: {"name":"DenoDetV2","arguments":{"image":"img_1","box_threshold":0.3,"top1":true}}
 - CrossModalInterpret: Task-oriented RGB/SAR cross-modal interpretation with shared-identity reasoning. Filters detections by target, pairs them, reasons about whether both views describe the same object, and returns compact structured output for a requested task. Supported tasks: crosscheck_exists, select_largest, select_highest_score, joint_scene, distance_largest_smallest. mode defaults to shared_identity; legacy_hard is only a comparison/fallback baseline. Capability boundary: category-level evidence only (no color/size/orientation attributes) and no static/moved temporal judgement. Use it after successful ObjectDetection and DenoDetV2 outputs only; do not hand-write detection boxes. Example: {"name":"CrossModalInterpret","arguments":{"rgb_detections":"<RGB_DETECTIONS_FROM_PREVIOUS_SUCCESSFUL_TOOL>","sar_detections":"<SAR_DETECTIONS_FROM_PREVIOUS_SUCCESSFUL_TOOL>","target":"ship","task":"crosscheck_exists","output_mode":"full"}}
-- SkillExecutor: Execute a named skill defined in the selected skill library. Example: {"name":"SkillExecutor","arguments":{"skill_name":"ObjectDetectSelectSkill","image":"img_1","target":"ship","selection_mode":"all"}}
 - Terminate: End the reasoning process and return the final answer. Example: {"name":"Terminate","arguments": {"ans":"Downtown area expanded by ~1.8 km² between 2018 and 2022."}}
 
 
@@ -32,20 +31,5 @@ To solve the problem:
 3. To use AddPoisLayer, first call GetAreaBoundary to get the area boundary Geopackage. To call ComputeDistance, first call AddPoisLayer to add POI layers or CrossModalInterpret with return_artifact=true to add detection layers.
 4. Use image references consistently: img_1/tif_1 is the first input image and img_2/tif_2 is the second input image. For RGB/SAR pairs, use img_1 for RGB/optical tools and img_2 for SAR tools such as DenoDetV2. For change detection, use pre_image=img_1 and post_image=img_2.
 5. You must output ONLY a single valid JSON object in the exact format below. Do NOT include any text, explanation, or content before or after the JSON.
-6. Prefer SkillExecutor only when the Selected Skills section lists one or more candidate skills and one of them clearly fits the task. If no suitable skill was matched, do not mention, plan, or call SkillExecutor; use raw tools only.
-    When using CrossModalTaskSkill through SkillExecutor, task_type must be one of optical_sar_verify, sar_optical_attribution, sar_candidate_recall, optical_sar_consistency, cross_modal_select_largest, cross_modal_select_highest_score, or cross_modal_distance_largest_smallest.
 {"thought": "a short, concise reasoning and planned action description", "actions": [{"name": "the name of the tool", "arguments": {"argument1": "value1", "argument2": "value2"}}]}
-7. If the Selected Skills section says that no suitable skill was matched, SkillExecutor is unavailable for this task. Use raw tools directly.
 """
-
-
-def build_no_skill_prompt(prompt: str) -> str:
-    lines = []
-    for line in prompt.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("- SkillExecutor:"):
-            continue
-        if "SkillExecutor" in stripped or "Selected Skills" in stripped:
-            continue
-        lines.append(line)
-    return "\n".join(lines).strip()

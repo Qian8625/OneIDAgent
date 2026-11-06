@@ -1,10 +1,9 @@
 """Single source of truth for cross-modal / cross-view pair geometry features.
 
-Both ``CrossModalInterpret_worker`` and ``CrossModalMatchSkill`` historically
-implemented their own IoU / center-distance / area-ratio math with slightly
-different hybrid-score weights (``0.50/0.30/0.10/0.10`` versus
-``0.45/0.30/0.15/0.10``).  This module replaces both with one implementation so
-that a given pair of boxes always yields identical features regardless of which
+The cross-modal worker historically implemented its own IoU / center-distance /
+area-ratio math with weights that drifted from the shared implementation
+(``0.50/0.30/0.10/0.10`` versus ``0.45/0.30/0.15/0.10``).  This module replaces it
+so that a given pair of boxes always yields identical features regardless of which
 component asks for them.
 
 The diagnostic score produced here is intentionally *not* a decision: it feeds

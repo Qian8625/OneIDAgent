@@ -214,15 +214,6 @@ tool_worker_config:
         script-addr: ${TOOL_WORKERS_DIR}/online_workers/ComputeDistance_worker.py
         port: 20019
         host: "0.0.0.0"
-  
-  - SkillExecutor:
-      worker_name: SkillExecutor
-      job_name: skill_executor
-      calculate_type: control
-      cmd:
-        script-addr: ${TOOL_WORKERS_DIR}/online_workers/SkillExecutor_worker.py
-        port: 20032
-        host: "0.0.0.0"
 
   - SmallObjectDetection:
         worker_name: SmallObjectDetection

@@ -50,7 +50,7 @@ def _collect(response: Mapping[str, Any], *keys: str) -> List[Dict[str, Any]]:
 class CrossModalAdapter(BaseAdapter):
     """Convert cross-modal matching output into per-modality observations."""
 
-    tool_names = ("CrossModalMatchSkill", "CrossModalInterpret", "CrossModalTaskSkill")
+    tool_names = ("CrossModalInterpret",)
     modality = Modality.CROSS_MODAL.value
 
     def to_observations(

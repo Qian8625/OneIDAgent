@@ -18,7 +18,6 @@ import yaml
 
 from tool_server.utils.utils import load_json_file, write_json_file
 from tool_server.utils.paths import existing_or_project_path, resolve_config_paths
-from tool_server.tool_workers.scripts.launch_scripts.skill_worker_config import append_manifest_skill_workers
 
 
 class ServerManager:
@@ -277,8 +276,6 @@ def main():
     with open(config_path, "r") as f:
         config = resolve_config_paths(yaml.safe_load(f))
 
-    config = append_manifest_skill_workers(config)
-    
     try:
         # Create server manager
         manager = ServerManager(config)

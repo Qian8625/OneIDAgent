@@ -38,7 +38,7 @@ pytest -q DS_VI/tests -k "not opt"               # engine tests, torch-free
 ```
 
 `tests/contract/` covers the public `CrossModalInterpret` contract, the
-RGB/SAR evidence pipeline, the match/task skill status mapping, the frozen GT
+RGB/SAR evidence pipeline, the frozen GT
 protocol, and a static check that the six app variants are wired identically.
 
 ## Running the agent without the UI
@@ -62,10 +62,7 @@ python scripts/ci/run_e2e.py                # everything
 python scripts/ci/run_e2e.py --only worker  # one suite
 ```
 
-`e2e_skill_chain.py` starts a controller plus two workers and calls the skill
-over HTTP, so it covers the real `skill -> controller -> tool` path rather than
-importing functions directly. All suites write process logs to `.e2e_tmp/`
-(git-ignored).
+All suites write process logs to `.e2e_tmp/` (git-ignored).
 
 ## Determinism
 

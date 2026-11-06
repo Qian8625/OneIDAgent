@@ -58,8 +58,6 @@ BATCH_SIZE="${BATCH_SIZE:-1}"
 
 MAX_ROUNDS="${MAX_ROUNDS:-15}"
 
-SKILL_MODE="${SKILL_MODE:-no_skill}"
-
 MAIN_PROCESS_PORT="${MAIN_PROCESS_PORT:-29401}"
 
 NUM_PROCESSES="${NUM_PROCESSES:-1}"
@@ -126,8 +124,6 @@ printf 'SAVE_DIR=%s\n' "${SAVE_DIR}"
 
 printf 'MAX_ROUNDS=%s\n' "${MAX_ROUNDS}"
 
-printf 'SKILL_MODE=%s\n' "${SKILL_MODE}"
-
 printf 'NUM_PROCESSES=%s\n' "${NUM_PROCESSES}"
 
 printf 'CUDA_VISIBLE_DEVICES=%s\n' "${CUDA_VISIBLE_DEVICES}"
@@ -157,8 +153,6 @@ accelerate launch \
   --task_name rsagent \
 
   --task_type e2e \
-
-  --skill_mode "${SKILL_MODE}" \
 
   --verbosity INFO \
 

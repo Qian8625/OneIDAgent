@@ -12,16 +12,15 @@ REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from tool_server.tool_workers.skills.registry import SKILL_REGISTRY
 from tool_server.tool_workers.tool_manager.base_manager import EXPECTED_ONLINE_TOOLS, ToolManager
 from tool_server.utils.paths import env_path
 
 """
-Registered tool and skill test script.
+Registered tool test script.
 
-It defines one suitable test case for each expected online tool and manifest-backed
-skill, following the registration order in EXPECTED_ONLINE_TOOLS. Offline-only tools
-are intentionally not included here.
+It defines one suitable test case for each expected online tool, following the
+registration order in EXPECTED_ONLINE_TOOLS. Offline-only tools are intentionally
+not included here.
 """
 
 
@@ -37,7 +36,7 @@ DISABLED_CASE_NAMES = {
     "SARToRGB",
     "CloudRemoval",
 }
-NON_SKILL_CASE_NAMES = {
+KNOWN_CASE_NAMES = {
     "Calculator",
     "OCR",
     "DrawBox",
@@ -128,7 +127,7 @@ def registered_case_order(cases: Dict[str, ToolCase], include_disabled: bool = F
 
 
 def list_case_order(include_disabled: bool = False) -> List[str]:
-    case_names = NON_SKILL_CASE_NAMES | {"SkillExecutor"} | set(SKILL_REGISTRY.keys())
+    case_names = set(KNOWN_CASE_NAMES)
     if not include_disabled:
         case_names -= DISABLED_CASE_NAMES
     ordered = [tool for tool in registered_tool_order() if tool in case_names]
@@ -288,104 +287,6 @@ def build_tool_cases(ctx: Dict[str, str]) -> Dict[str, ToolCase]:
                 "layer_prefix": "ship",
             },
         ),
-        "SkillExecutor": make_case(
-            "SkillExecutor",
-            {
-                "skill_name": "ObjectVisualOutputSkill",
-                "image": ctx["rgb_image"],
-                "visual_type": "box_and_label",
-                "bbox": [289, 645, 330, 724],
-                "labels": ["red car"],
-                "output_path": os.path.join(scratch_dir, "skill_executor_visual_red_car.png"),
-            },
-            [ctx["rgb_image"]],
-        ),
-        "ObjectDetectSelectSkill": make_case(
-            "ObjectDetectSelectSkill",
-            {
-                "image": ctx["rgb_image"],
-                "target": "red car",
-                "selection_mode": "all",
-                "detector": "text_to_bbox",
-                "visualize": True,
-                "max_draw": 3,
-            },
-            [ctx["rgb_image"]],
-        ),
-        "ObjectMeasureSkill": make_case(
-            "ObjectMeasureSkill",
-            {
-                "image": ctx["rgb_image"],
-                "target": "red car",
-                "measure_type": "area",
-                "bbox": [289, 645, 330, 724],
-                "gsd_m_per_pixel": 0.3,
-                "visualize": True,
-            },
-            [ctx["rgb_image"]],
-        ),
-        "ObjectVisualOutputSkill": make_case(
-            "ObjectVisualOutputSkill",
-            {
-                "image": ctx["rgb_image"],
-                "visual_type": "box_and_label",
-                "bbox": [289, 645, 330, 724],
-                "labels": ["red car"],
-                "output_path": os.path.join(scratch_dir, "object_visual_red_car.png"),
-            },
-            [ctx["rgb_image"]],
-        ),
-        "SAREvidenceExtractSkill": make_case(
-            "SAREvidenceExtractSkill",
-            {
-                "sar_image": ctx["sar_image"],
-                "target": "ship",
-                "preprocess_mode": "auto",
-                "confidence_threshold": 0.25,
-                "visualize": True,
-                "max_candidates": 20,
-            },
-            [ctx["sar_image"]],
-        ),
-        "CrossModalMatchSkill": make_case(
-            "CrossModalMatchSkill",
-            {
-                "rgb_image": ctx["assets_rgb"],
-                "sar_image": ctx["assets_sar"],
-                "target": "ship",
-                "rgb_detections": [{"bbox": [10, 10, 60, 60], "score": 0.9, "label": "ship"}],
-                "sar_candidates": [{"bbox": [12, 12, 62, 62], "score": 0.8, "label": "ship"}],
-                "match_strategy": "hybrid",
-                "score_threshold": 0.3,
-                "visualize": True,
-                "max_draw": 5,
-            },
-            [ctx["assets_rgb"], ctx["assets_sar"]],
-        ),
-        "CrossModalTaskSkill": make_case(
-            "CrossModalTaskSkill",
-            {
-                "rgb_image": ctx["assets_rgb"],
-                "sar_image": ctx["assets_sar"],
-                "target": "ship",
-                "task_type": "optical_sar_verify",
-                "question": "Verify with SAR evidence whether the optical ship detections are credible.",
-                "matched_pairs": [
-                    {
-                        "rgb_bbox": [10, 10, 60, 60],
-                        "sar_bbox": [12, 12, 62, 62],
-                        "match_score": 0.82,
-                        "iou": 0.7,
-                        "match_type": "strong_match",
-                        "rgb_label": "ship",
-                        "sar_label": "ship",
-                    }
-                ],
-                "visualize": True,
-                "max_draw": 5,
-            },
-            [ctx["assets_rgb"], ctx["assets_sar"]],
-        ),
     }
 
 
@@ -493,8 +394,8 @@ def print_no_online_tools_diagnostic(tm: ToolManager) -> None:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Run registered tool and skill test cases.")
-    parser.add_argument("--tool", default="Calculator", help="Tool or skill name to test. Use --all to run every registered test case.")
+    parser = argparse.ArgumentParser(description="Run registered tool test cases.")
+    parser.add_argument("--tool", default="Calculator", help="Tool name to test. Use --all to run every registered test case.")
     parser.add_argument("--all", action="store_true", help="Run all registered test cases in registration order.")
     parser.add_argument("--include-disabled", action="store_true", help="Include legacy disabled tool cases in --all and --list output.")
     parser.add_argument("--list", action="store_true", help="List available test cases and exit.")
@@ -561,12 +462,12 @@ def main():
 
     if args.tool not in cases:
         print(f"Unknown or unregistered test case: {args.tool}")
-        print("Use --list to see supported registered tools and skills.")
+        print("Use --list to see supported registered tools.")
         return
 
     if args.tool not in supported_tools:
         print(f"Unsupported test case is excluded from this runner: {args.tool}")
-        print("Use --list to see supported registered tools and skills.")
+        print("Use --list to see supported registered tools.")
         return
 
     case_tool, params, required_paths = cases[args.tool]

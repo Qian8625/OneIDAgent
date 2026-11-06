@@ -3,7 +3,7 @@
 
 pytest is not installed in the runtime environments (see docs/dev_env.md), so the
 contract tests are plain assertion functions. This runner imports every
-``test_*.py`` under ``tests/contract`` (plus the legacy dependency guard) and
+``test_*.py`` under ``tests/contract`` and
 calls each ``test_*`` function, reporting a PASS/FAIL table.
 
 Usage:
@@ -22,7 +22,6 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 TARGET_DIRS = [REPO_ROOT / "tests" / "contract"]
-EXTRA_FILES = [REPO_ROOT / "tests" / "skill_eval" / "test_cross_modal_dependency_guard.py"]
 
 
 def _load(path: Path):
@@ -38,7 +37,6 @@ def main() -> int:
     files = []
     for directory in TARGET_DIRS:
         files.extend(sorted(directory.glob("test_*.py")))
-    files.extend(path for path in EXTRA_FILES if path.is_file())
 
     passed = failed = 0
     skipped = []

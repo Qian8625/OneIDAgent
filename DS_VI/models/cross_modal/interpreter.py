@@ -291,8 +291,8 @@ class CrossModalInterpreter:
                     out.append(det)
         return out
 
-    # Geometry delegates to DS_VI.models.shared_identity.physical_features so this
-    # worker and CrossModalMatchSkill can never drift apart again.
+    # Geometry delegates to DS_VI.models.shared_identity.physical_features so all
+    # callers share one implementation.
     @staticmethod
     def bbox_area(bbox: Sequence[int]) -> float:
         return shared_bbox_area(bbox)

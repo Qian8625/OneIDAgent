@@ -49,7 +49,7 @@ def _append_candidate(candidates: List[Path], value: Path) -> None:
 
 def _env_roots() -> List[Path]:
     roots: List[Path] = []
-    for name in ("ONEID_IMAGE_ROOT", "SKILL_EVAL_DATA_ROOT", "RS_DATA_ROOT", "ONEID_DATA_ROOT"):
+    for name in ("ONEID_IMAGE_ROOT", "RS_DATA_ROOT", "ONEID_DATA_ROOT"):
         value = os.environ.get(name)
         if value:
             roots.append(Path(value).expanduser())

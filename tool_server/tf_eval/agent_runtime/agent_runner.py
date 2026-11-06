@@ -6,16 +6,13 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from tool_server.tf_eval.agent_runtime.run_config import AgentRunConfig, RunMode
+from tool_server.tf_eval.agent_runtime.run_config import AgentRunConfig
 from tool_server.tf_eval.agent_runtime.structured_summary import (
     build_structured_observation,
     get_structured_result_for_registry,
 )
 from tool_server.tf_eval.agent_runtime.trace_schema import AgentTrace, create_agent_trace
 from tool_server.tf_eval.utils.rs_agent_prompt import RS_AGENT_PROMPT
-from tool_server.tool_workers.skills.catalog import build_selected_skill_catalog
-from tool_server.tool_workers.skills.registry import SKILL_INPUT_BINDINGS, SKILL_REGISTRY
-from tool_server.tool_workers.skills.router import route_skills
 from tool_server.tool_workers.tool_manager.base_manager import ToolManager
 from tool_server.tool_workers.cross_modal_evidence import (
     EXAMPLE_BBOX_PATTERNS,
@@ -44,11 +41,6 @@ TOOL_ARG_BINDINGS = {
     "CrossModalInterpret": {"georef_image": "optical_image"},
 }
 
-SKILL_MODALITY_BINDINGS = {
-    "CrossModalMatchSkill": {"rgb_image": "optical_image", "sar_image": "sar_image"},
-    "CrossModalTaskSkill": {"rgb_image": "optical_image", "sar_image": "sar_image"},
-}
-
 DETERMINISTIC_FAILURE_PATTERNS = (
     "image not found",
     "not found:",
@@ -66,44 +58,6 @@ NO_DETECTION_PATTERNS = (
     "no detections found after filtering",
     "no detections found after thresholding",
 )
-
-CROSS_MODAL_TASK_ALIASES = {
-    "crosscheck_exists": "optical_sar_verify",
-    "crosscheck": "optical_sar_verify",
-    "exists": "optical_sar_verify",
-    "exist": "optical_sar_verify",
-    "joint_scene": "optical_sar_consistency",
-    "select_largest": "cross_modal_select_largest",
-    "largest": "cross_modal_select_largest",
-    "select_highest_score": "cross_modal_select_highest_score",
-    "highest_score": "cross_modal_select_highest_score",
-    "highest_confidence": "cross_modal_select_highest_score",
-    "distance_largest_smallest": "cross_modal_distance_largest_smallest",
-    "largest_smallest_distance": "cross_modal_distance_largest_smallest",
-    "select_smallest": "cross_modal_select_largest",
-    "select_largest_smallest": "cross_modal_distance_largest_smallest",
-}
-
-
-TARGET_HINTS = (
-    "aircraft", "airplane", "plane", "ship", "vehicle", "car", "tank", "bridge", "harbor",
-    "baseball diamond", "tennis court", "basketball court", "swimming pool", "stadium",
-    "ground track field", "groundtrackfield", "airport", "dam", "overpass", "train station",
-    "expressway service area", "golf field", "building", "house", "excavator",
-)
-
-MEASURE_SELECTOR_WORDS = {
-    "largest",
-    "smallest",
-    "nearest",
-    "farthest",
-    "leftmost",
-    "rightmost",
-    "topmost",
-    "bottommost",
-    "first",
-    "second",
-}
 
 TOOL_DEFAULT_ARGUMENTS = {
     "AddText": {"color": "green"},
@@ -201,18 +155,6 @@ class LocalLLM:
 
         generated_ids = outputs[0][inputs.input_ids.shape[-1]:]
         return self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-
-
-def build_no_skill_prompt(prompt: str) -> str:
-    lines = []
-    for line in prompt.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("- SkillExecutor:"):
-            continue
-        if "SkillExecutor" in stripped or "Selected Skills" in stripped:
-            continue
-        lines.append(line)
-    return "\n".join(lines).strip()
 
 
 def try_parse_agent_json(text: str) -> Dict[str, Any]:
@@ -383,22 +325,6 @@ def inject_runtime_arguments_with_overrides(
     return injected, overrides
 
 
-def inject_skill_runtime_arguments(api_args: Dict[str, Any], registry: Dict[str, Any]) -> Dict[str, Any]:
-    merged = dict(api_args or {})
-    skill_name = merged.get("skill_name")
-    if not skill_name:
-        return merged
-    for arg_name, registry_key in SKILL_INPUT_BINDINGS.get(skill_name, {}).items():
-        if merged.get(arg_name) in [None, ""] and registry.get(registry_key):
-            merged[arg_name] = registry[registry_key]
-    for arg_name, registry_key in SKILL_MODALITY_BINDINGS.get(str(skill_name), {}).items():
-        if registry.get(registry_key) and merged.get(arg_name) != registry[registry_key]:
-            merged[arg_name] = registry[registry_key]
-    if "input_registry" not in merged:
-        merged["input_registry"] = registry
-    return resolve_argument_references(merged, registry)
-
-
 def _normalize_for_signature(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(key): _normalize_for_signature(item) for key, item in sorted(value.items()) if key != "input_registry"}
@@ -419,171 +345,6 @@ def is_deterministic_failure(tool_resp: Dict[str, Any]) -> bool:
 def is_no_detection_response(tool_resp: Dict[str, Any]) -> bool:
     text = str(tool_resp.get("text") or "").lower()
     return any(pattern in text for pattern in NO_DETECTION_PATTERNS)
-
-
-def normalize_cross_modal_task_type(value: Any) -> str:
-    text = str(value or "").strip()
-    if not text:
-        return text
-    normalized = "_".join(text.lower().replace("-", "_").split())
-    return CROSS_MODAL_TASK_ALIASES.get(normalized, normalized)
-
-
-def normalize_skill_action_args(api_args: Dict[str, Any]) -> Dict[str, Any]:
-    args = dict(api_args or {})
-    if args.get("skill_name") != "CrossModalTaskSkill":
-        return args
-    raw_task = args.get("task_type") or args.get("task") or args.get("mode") or args.get("intent")
-    if raw_task not in [None, ""]:
-        args["task_type"] = normalize_cross_modal_task_type(raw_task)
-    return args
-
-
-# Detection evidence pipeline (extract / register / prepare) lives in
-# tool_server/tool_workers/cross_modal_evidence.py: exactly one implementation.
-
-
-def _extract_gsd(question: str) -> Optional[float]:
-    match = re.search(r"\bGSD(?:\s+(?:value\s+)?(?:of|is)|\s*=)?\s*([0-9]+(?:\.[0-9]+)?)", question, re.I)
-    if not match:
-        match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*m\s*/\s*p(?:ixel|x)", question, re.I)
-    if match:
-        try:
-            return float(match.group(1))
-        except Exception:
-            return None
-    return None
-
-
-def _infer_target(question: str) -> str:
-    text = str(question or "").lower()
-    for target in TARGET_HINTS:
-        if target in text:
-            return target
-    return "object"
-
-
-def _clean_measure_target_phrase(phrase: str) -> Tuple[str, Optional[str]]:
-    text = " ".join(str(phrase or "").strip(" .?;:\n\t").split())
-    text = re.sub(r"^(?:the|a|an)\s+", "", text, flags=re.I)
-    selector = None
-    for word in MEASURE_SELECTOR_WORDS:
-        pattern = rf"^{word}\s+"
-        if re.search(pattern, text, flags=re.I):
-            selector = word
-            text = re.sub(pattern, "", text, count=1, flags=re.I).strip()
-            break
-    return text or "object", selector
-
-
-def _infer_measure_request(question: str) -> Dict[str, Any]:
-    text = str(question or "")
-    lowered = text.lower()
-    request: Dict[str, Any] = {}
-
-    if "pixel dimension" in lowered or "pixel width" in lowered or "length-to-width" in lowered or "length to width" in lowered:
-        request["measure_type"] = "pixel_dimensions"
-        request["unit"] = "pixel"
-    elif "distance" in lowered or re.search(r"\bbetween\b", lowered):
-        request["measure_type"] = "pair_distance"
-    elif "centroid" in lowered or "center" in lowered:
-        request["measure_type"] = "centroid"
-    elif "width" in lowered or "height" in lowered or "length" in lowered:
-        request["measure_type"] = "bbox_size"
-    else:
-        request["measure_type"] = "area"
-
-    ratio_match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*:\s*([0-9]+(?:\.[0-9]+)?)\s+length\s*-?\s*to\s*-?\s*width", text, re.I)
-    if not ratio_match:
-        ratio_match = re.search(r"length\s*-?\s*to\s*-?\s*width\s+ratio\s+(?:of\s+)?([0-9]+(?:\.[0-9]+)?)\s*:\s*([0-9]+(?:\.[0-9]+)?)", text, re.I)
-    if ratio_match:
-        try:
-            numerator = float(ratio_match.group(1))
-            denominator = float(ratio_match.group(2))
-            if denominator:
-                request["length_width_ratio"] = numerator / denominator
-        except Exception:
-            pass
-
-    between_match = re.search(
-        r"\bbetween\s+(?:the\s+|a\s+|an\s+)?(.+?)\s+and\s+(?:the\s+|a\s+|an\s+)?(.+?)(?=,?\s*(?:considering|using|with)\b|[?.]|$)",
-        text,
-        re.I,
-    )
-    if between_match:
-        target_a, selector_a = _clean_measure_target_phrase(between_match.group(1))
-        target_b, selector_b = _clean_measure_target_phrase(between_match.group(2))
-        request["target"] = target_a
-        request["reference_target"] = target_b
-        if selector_a:
-            request["select_a"] = selector_a
-        if selector_b:
-            request["select_b"] = selector_b
-    else:
-        target = _infer_target(text)
-        request["target"] = target
-        for word in MEASURE_SELECTOR_WORDS:
-            if re.search(rf"\b{word}\s+{re.escape(target)}\b", lowered):
-                request["select_a"] = word
-                break
-
-    return request
-
-
-def _infer_cross_modal_task_type(question: str) -> str:
-    text = str(question or "").lower()
-    if "highest-confidence" in text or "highest confidence" in text or "highest-score" in text:
-        return "cross_modal_select_highest_score"
-    if "largest" in text and "smallest" in text and "distance" in text:
-        return "cross_modal_distance_largest_smallest"
-    if "largest" in text:
-        return "cross_modal_select_largest"
-    if "jointly detect" in text or "deduplicated count" in text:
-        return "optical_sar_consistency"
-    if "whether" in text or "exist" in text or "final conclusion" in text:
-        return "optical_sar_verify"
-    return "optical_sar_verify"
-
-
-def build_oracle_skill_args(gold_skill: str, question: str, registry: Dict[str, Any], eval_meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    eval_meta = eval_meta or {}
-    args: Dict[str, Any] = {"skill_name": gold_skill, "input_registry": registry, "question": question, "query": question, "instruction": question}
-    target = str(eval_meta.get("target") or _infer_target(question))
-    if gold_skill in {"ObjectMeasureSkill", "ObjectDetectSelectSkill", "CrossModalMatchSkill", "CrossModalTaskSkill"}:
-        args["target"] = target
-    if gold_skill == "ObjectMeasureSkill":
-        measure_request = _infer_measure_request(question)
-        target = str(eval_meta.get("target") or measure_request.get("target") or target)
-        args["target"] = target
-        args["image"] = registry.get("primary_image")
-        gsd = eval_meta.get("gsd_m_per_pixel") or _extract_gsd(question)
-        if gsd is not None:
-            args["gsd_m_per_pixel"] = gsd
-        args["measure_type"] = str(eval_meta.get("measure_type") or measure_request.get("measure_type") or "area")
-        for key in ["reference_target", "select_a", "select_b", "length_width_ratio"]:
-            if measure_request.get(key) not in [None, ""]:
-                args[key] = measure_request[key]
-        if gsd is not None and args["measure_type"] in {"area", "distance", "pair_distance"}:
-            args["unit"] = "meter"
-        elif measure_request.get("unit"):
-            args["unit"] = measure_request["unit"]
-    elif gold_skill == "ObjectDetectSelectSkill":
-        args["image"] = registry.get("primary_image")
-        lowered = question.lower()
-        if "largest" in lowered:
-            args["selection_mode"] = "largest"
-        elif "smallest" in lowered:
-            args["selection_mode"] = "smallest"
-        else:
-            args["selection_mode"] = "all"
-    elif gold_skill == "CrossModalMatchSkill":
-        args["rgb_image"] = registry.get("optical_image") or registry.get("primary_image")
-        args["sar_image"] = registry.get("sar_image")
-    elif gold_skill == "CrossModalTaskSkill":
-        args["rgb_image"] = registry.get("optical_image") or registry.get("primary_image")
-        args["sar_image"] = registry.get("sar_image")
-        args["task_type"] = str(eval_meta.get("task_type") or _infer_cross_modal_task_type(question))
-    return {key: value for key, value in args.items() if value not in [None, ""]}
 
 
 def normalize_tool_response(tool_resp: Any, api_name: str) -> Dict[str, Any]:
@@ -701,8 +462,6 @@ def update_registry_with_tool_response(
                 artifact_type=item.get("type") or "other",
                 tool_name=api_name,
             )
-    if api_name == "SkillExecutor":
-        return registry
     visual = detect_output_visual(tool_resp)
     if visual:
         registry = register_artifact(
@@ -785,13 +544,11 @@ def build_artifact_summary(registry: Dict[str, Any]) -> str:
 class AgentRunner:
     def __init__(
         self,
-        mode: RunMode | str = RunMode.AUTO_SKILL,
         config: Optional[AgentRunConfig] = None,
         llm: Any = None,
         tool_manager: Any = None,
     ):
-        self.config = config or AgentRunConfig(mode=mode)
-        self.mode = RunMode.normalize(self.config.mode)
+        self.config = config or AgentRunConfig()
         self.llm = llm
         self.tool_manager = tool_manager
 
@@ -799,18 +556,16 @@ class AgentRunner:
         self,
         question: str,
         input_registry: Optional[Dict[str, Any]] = None,
-        oracle_skill: Optional[Any] = None,
         max_rounds: Optional[int] = None,
         sample_id: str = "",
-        eval_meta: Optional[Dict[str, Any]] = None,
     ) -> AgentTrace:
         started_at = time.perf_counter()
         registry = dict(input_registry or {})
         sample_id = sample_id or str(registry.get("sample_id") or "")
-        trace = create_agent_trace(sample_id=sample_id, mode=self.mode.value, question=question or "")
+        trace = create_agent_trace(sample_id=sample_id, question=question or "")
 
         def finish() -> AgentTrace:
-            trace["total_tool_calls"] = trace["raw_tool_calls"] + trace["skill_tool_calls"]
+            trace["total_tool_calls"] = trace["raw_tool_calls"]
             trace["wall_time"] = round(time.perf_counter() - started_at, 6)
             trace["llm_time"] = round(trace["llm_time"], 6)
             trace["tool_time"] = round(trace["tool_time"], 6)
@@ -821,42 +576,15 @@ class AgentRunner:
             return finish()
 
         max_rounds = int(max_rounds or self.config.max_rounds)
-        selected_skills, router_trace = self._select_skills(question, registry, oracle_skill, trace)
-        selected_skill_prompt = build_selected_skill_catalog(selected_skills)
-        trace["selected_skills"] = selected_skills
-        trace["router_trace"] = router_trace
-
         conversation = [{"role": "user", "content": build_initial_user_message(question, registry)}]
         current_gpkg = None
         failed_call_history: Dict[str, Dict[str, Any]] = {}
-
-        if self.mode in {RunMode.ORACLE_SKILL, RunMode.ORACLE_FORCED_SKILL} and oracle_skill:
-            forced_trace = self._run_forced_oracle_skill(
-                question=question,
-                registry=registry,
-                oracle_skill=oracle_skill,
-                eval_meta=eval_meta or {},
-                trace=trace,
-                started_at=started_at,
-            )
-            return forced_trace
-
-        if self._should_force_auto_skill(selected_skills, eval_meta or {}):
-            forced_trace = self._run_forced_selected_skill(
-                question=question,
-                registry=registry,
-                selected_skill=selected_skills[0]["skill_name"],
-                eval_meta=eval_meta or {},
-                trace=trace,
-                started_at=started_at,
-            )
-            return forced_trace
 
         for round_id in range(1, max_rounds + 1):
             trace["rounds"] = round_id
             try:
                 llm_started = time.perf_counter()
-                model_output = self._generate(conversation, selected_skill_prompt)
+                model_output = self._generate(conversation)
                 trace["llm_time"] += time.perf_counter() - llm_started
             except Exception as exc:
                 self._add_error(trace, "llm_error")
@@ -907,24 +635,6 @@ class AgentRunner:
                 )
                 continue
 
-            if self.mode == RunMode.NO_SKILL and (api_name == "SkillExecutor" or api_name in SKILL_REGISTRY):
-                self._add_error(trace, "disabled_skill_call")
-                trace["actions"].append({**raw_action_record, "api_name": api_name, "executed": False, "error": "skill_disabled"})
-                conversation = self._append_feedback(
-                    conversation,
-                    model_output,
-                    f"{api_name} is disabled in no-skill mode. Please select a raw tool from the tool list and continue.",
-                )
-                continue
-
-            if api_name in SKILL_REGISTRY:
-                api_args = dict(api_args or {})
-                api_args["skill_name"] = api_name
-                api_args["input_registry"] = registry
-                api_name = "SkillExecutor"
-            if api_name == "SkillExecutor":
-                api_args = normalize_skill_action_args(api_args)
-
             unresolved_refs = find_unresolved_references(api_args, registry)
             if unresolved_refs:
                 self._add_error(trace, "unresolved_references")
@@ -946,20 +656,6 @@ class AgentRunner:
             injected_args, modality_overrides = inject_runtime_arguments_with_overrides(api_name, api_args, registry, current_gpkg)
             if modality_overrides:
                 trace.setdefault("modality_binding_overrides", []).extend(modality_overrides)
-
-            if api_name == "SkillExecutor":
-                injected_args, should_continue = self._prepare_skill_action(
-                    injected_args,
-                    selected_skills,
-                    registry,
-                    trace,
-                    raw_action_record,
-                    conversation,
-                    model_output,
-                )
-                if should_continue is not None:
-                    conversation = should_continue
-                    continue
 
             if api_name == "CrossModalInterpret":
                 injected_args, dependency_error = prepare_cross_modal_interpret_args(injected_args, registry)
@@ -1026,18 +722,7 @@ class AgentRunner:
                     "deterministic": is_deterministic_failure(tool_resp),
                 })
                 failed_call_history[signature] = failure
-            if api_name == "SkillExecutor":
-                trace["skill_tool_calls"] += 1
-                trace["skill_calls"].append({
-                    "round": round_id,
-                    "skill_name": injected_args.get("skill_name"),
-                    "arguments": injected_args,
-                    "success": ok,
-                    "elapsed": round(elapsed, 6),
-                    "response": tool_resp,
-                })
-            else:
-                trace["raw_tool_calls"] += 1
+            trace["raw_tool_calls"] += 1
 
             trace["tool_responses"].append({
                 "round": round_id,
@@ -1079,269 +764,11 @@ class AgentRunner:
         self._add_error(trace, "max_rounds")
         return finish()
 
-    def _select_skills(
-        self,
-        question: str,
-        registry: Dict[str, Any],
-        oracle_skill: Optional[Any],
-        trace: AgentTrace,
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        if self.mode == RunMode.NO_SKILL:
-            return [], {"mode": self.mode.value, "skipped_reason": "skill_disabled"}
-
-        if self.mode in {RunMode.ORACLE_SKILL, RunMode.ORACLE_FORCED_SKILL}:
-            skill_name = oracle_skill.get("skill_name") if isinstance(oracle_skill, dict) else oracle_skill
-            if not skill_name:
-                self._add_error(trace, "missing_oracle_skill")
-                return [], {"mode": self.mode.value, "skipped_reason": "missing_oracle_skill"}
-            if skill_name not in SKILL_REGISTRY:
-                self._add_error(trace, "invalid_oracle_skill")
-                return [], {"mode": self.mode.value, "skipped_reason": "invalid_oracle_skill", "oracle_skill": skill_name}
-            selected = [{"skill_name": skill_name, "score": 1.0, "reasons": ["oracle skill"]}]
-            return selected, {"mode": self.mode.value, "skipped_reason": "oracle_skill_provided", "selected": selected}
-
-        selected = route_skills(
-            user_query=question,
-            input_registry=registry,
-            top_k=self.config.top_k,
-            min_score=self.config.min_score,
-            score_margin=self.config.score_margin,
-        )
-        return selected, {
-            "mode": self.mode.value,
-            "params": {
-                "top_k": self.config.top_k,
-                "min_score": self.config.min_score,
-                "score_margin": self.config.score_margin,
-            },
-            "selected": selected,
-        }
-
-    def _run_forced_oracle_skill(
-        self,
-        question: str,
-        registry: Dict[str, Any],
-        oracle_skill: Any,
-        eval_meta: Dict[str, Any],
-        trace: AgentTrace,
-        started_at: float,
-    ) -> AgentTrace:
-        skill_name = oracle_skill.get("skill_name") if isinstance(oracle_skill, dict) else str(oracle_skill)
-        return self._run_forced_skill(
-            question=question,
-            registry=registry,
-            skill_name=skill_name,
-            eval_meta=eval_meta,
-            trace=trace,
-            started_at=started_at,
-            forced_key="forced_oracle",
-            forced_thought="Forced oracle skill execution.",
-            final_thought="Forced oracle skill produced a final answer.",
-        )
-
-    def _run_forced_selected_skill(
-        self,
-        question: str,
-        registry: Dict[str, Any],
-        selected_skill: str,
-        eval_meta: Dict[str, Any],
-        trace: AgentTrace,
-        started_at: float,
-    ) -> AgentTrace:
-        return self._run_forced_skill(
-            question=question,
-            registry=registry,
-            skill_name=selected_skill,
-            eval_meta=eval_meta,
-            trace=trace,
-            started_at=started_at,
-            forced_key="forced_auto_skill",
-            forced_thought="Forced auto selected skill execution.",
-            final_thought="Forced auto selected skill produced a final answer.",
-        )
-
-    def _run_forced_skill(
-        self,
-        question: str,
-        registry: Dict[str, Any],
-        skill_name: str,
-        eval_meta: Dict[str, Any],
-        trace: AgentTrace,
-        started_at: float,
-        forced_key: str,
-        forced_thought: str,
-        final_thought: str,
-    ) -> AgentTrace:
-        if not skill_name or skill_name not in SKILL_REGISTRY:
-            self._add_error(trace, "invalid_oracle_skill")
-            trace["wall_time"] = round(time.perf_counter() - started_at, 6)
-            return trace
-
-        args = build_oracle_skill_args(skill_name, question, registry, eval_meta=eval_meta)
-        args = normalize_skill_action_args(args)
-        args = inject_skill_runtime_arguments(args, registry)
-        round_id = 1
-        trace["rounds"] = round_id
-        trace["actions"].append({
-            "round": round_id,
-            "thought": forced_thought,
-            "raw_action": {"name": "SkillExecutor", "arguments": args},
-            "api_name": "SkillExecutor",
-            "arguments": args,
-            "executed": True,
-            forced_key: True,
-        })
-
-        tool_started = time.perf_counter()
-        try:
-            raw_tool_resp = self._get_tool_manager().call_tool("SkillExecutor", args)
-        except Exception as exc:
-            raw_tool_resp = {"error_code": -1, "text": f"Tool call failed: {exc}"}
-        elapsed = time.perf_counter() - tool_started
-        trace["tool_time"] += elapsed
-        tool_resp = normalize_tool_response(raw_tool_resp, "SkillExecutor")
-        ok = tool_resp.get("error_code") == 0
-        if not ok:
-            self._add_error(trace, "tool_error")
-
-        trace["skill_tool_calls"] += 1
-        trace["skill_calls"].append({
-            "round": round_id,
-            "skill_name": skill_name,
-            "arguments": args,
-            "success": ok,
-            "elapsed": round(elapsed, 6),
-            "response": tool_resp,
-            forced_key: True,
-        })
-        trace["tool_responses"].append({
-            "round": round_id,
-            "api_name": "SkillExecutor",
-            "elapsed": round(elapsed, 6),
-            "response": tool_resp,
-        })
-        registry = update_registry_with_tool_response(registry, "SkillExecutor", tool_resp, round_id=round_id)
-        trace["input_registry_after_oracle"] = {key: registry.get(key) for key in ["primary_image", "optical_image", "sar_image", "latest_successful_structured"] if registry.get(key)}
-
-        if ok:
-            answer = ""
-            task_result = tool_resp.get("task_result")
-            if isinstance(task_result, dict):
-                answer = str(task_result.get("answer") or "")
-            if not answer:
-                structured = tool_resp.get("structured") if isinstance(tool_resp.get("structured"), dict) else {}
-                nested_result = structured.get("task_result") if isinstance(structured, dict) else {}
-                if isinstance(nested_result, dict):
-                    answer = str(nested_result.get("answer") or "")
-            if not answer:
-                answer = self._format_forced_skill_answer(skill_name, tool_resp)
-            trace["final_answer"] = answer or str(tool_resp.get("text") or "")
-            trace["terminated"] = True
-            trace["actions"].append({
-                "round": 2,
-                "thought": final_thought,
-                "raw_action": {"name": "Terminate", "arguments": {"ans": trace["final_answer"]}},
-                "api_name": "Terminate",
-                "arguments": {"ans": trace["final_answer"]},
-                "executed": True,
-                forced_key: True,
-            })
-            trace["rounds"] = 2
-
-        trace["total_tool_calls"] = trace["raw_tool_calls"] + trace["skill_tool_calls"]
-        trace["wall_time"] = round(time.perf_counter() - started_at, 6)
-        trace["llm_time"] = round(trace["llm_time"], 6)
-        trace["tool_time"] = round(trace["tool_time"], 6)
-        return trace
-
-    def _should_force_auto_skill(self, selected_skills: List[Dict[str, Any]], eval_meta: Dict[str, Any]) -> bool:
-        if self.mode != RunMode.AUTO_SKILL or not selected_skills:
-            return False
-        if not eval_meta.get("should_use_skill"):
-            return False
-        selected_name = selected_skills[0].get("skill_name")
-        gold_skill = eval_meta.get("gold_skill")
-        if gold_skill and selected_name != gold_skill:
-            return False
-        return bool(selected_name) and self._is_tool_available("SkillExecutor")
-
-    @staticmethod
-    def _format_forced_skill_answer(skill_name: str, tool_resp: Dict[str, Any]) -> str:
-        if skill_name != "ObjectMeasureSkill":
-            return ""
-        structured = tool_resp.get("structured") if isinstance(tool_resp.get("structured"), dict) else {}
-        measurement = structured.get("measurement") if isinstance(structured.get("measurement"), dict) else {}
-        measure_type = str(structured.get("measure_type") or "")
-        target = str(structured.get("target") or "target")
-        if measure_type in {"distance", "pair_distance"}:
-            if measurement.get("distance_m") is not None:
-                return f"The distance for {target} is {float(measurement['distance_m']):.2f} meters."
-            if measurement.get("distance_px") is not None:
-                return f"The distance for {target} is {float(measurement['distance_px']):.2f} pixels."
-        if measure_type == "area":
-            if measurement.get("area_m2") is not None:
-                return f"The area of {target} is {float(measurement['area_m2']):.2f} square meters."
-            if measurement.get("area_px") is not None:
-                return f"The area of {target} is {float(measurement['area_px']):.2f} square pixels."
-        if measure_type in {"bbox_size", "pixel_dimensions"}:
-            width = measurement.get("width_px")
-            height = measurement.get("height_px")
-            if width is not None and height is not None:
-                return f"Pixel width ≈ {float(width):.2f} px. Pixel length ≈ {float(height):.2f} px."
-        if measure_type == "centroid" and measurement.get("centroid") is not None:
-            return f"The centroid of {target} is {measurement['centroid']}."
-        return ""
-
-    def _prepare_skill_action(
-        self,
-        injected_args: Dict[str, Any],
-        selected_skills: List[Dict[str, Any]],
-        registry: Dict[str, Any],
-        trace: AgentTrace,
-        raw_action_record: Dict[str, Any],
-        conversation: List[Dict[str, str]],
-        model_output: str,
-    ) -> Tuple[Dict[str, Any], Optional[List[Dict[str, str]]]]:
-        if not selected_skills:
-            self._add_error(trace, "no_selected_skills")
-            trace["actions"].append({**raw_action_record, "api_name": "SkillExecutor", "arguments": injected_args, "executed": False, "error": "no_selected_skills"})
-            return injected_args, self._append_feedback(
-                conversation,
-                model_output,
-                "No suitable skill is available for this task. Do not use SkillExecutor; choose raw tools directly.",
-            )
-
-        if not self._is_tool_available("SkillExecutor"):
-            self._add_error(trace, "skill_executor_unavailable")
-            trace["actions"].append({**raw_action_record, "api_name": "SkillExecutor", "arguments": injected_args, "executed": False, "error": "skill_executor_unavailable"})
-            return injected_args, self._append_feedback(
-                conversation,
-                model_output,
-                "SkillExecutor is unavailable in the current runtime. Please select a raw tool from the tool list and continue.",
-            )
-
-        if not injected_args.get("skill_name"):
-            injected_args["skill_name"] = selected_skills[0]["skill_name"]
-        selected_names = {item["skill_name"] for item in selected_skills}
-        if injected_args.get("skill_name") not in selected_names:
-            self._add_error(trace, "skill_not_selected")
-            trace["actions"].append({**raw_action_record, "api_name": "SkillExecutor", "arguments": injected_args, "executed": False, "error": "skill_not_selected"})
-            return injected_args, self._append_feedback(
-                conversation,
-                model_output,
-                "The requested skill_name is not in the Selected Skills list. Use one selected skill only, or choose raw tools directly.",
-            )
-        return inject_skill_runtime_arguments(injected_args, registry), None
-
-    def _generate(self, conversation: List[Dict[str, str]], selected_skill_prompt: str) -> str:
-        llm = self._get_llm()
-        try:
-            return llm.generate(conversation, extra_system_prompt=selected_skill_prompt)
-        except TypeError:
-            return llm.generate(conversation)
+    def _generate(self, conversation: List[Dict[str, str]]) -> str:
+        return self._get_llm().generate(conversation)
 
     def _get_llm(self) -> Any:
-        system_prompt = build_no_skill_prompt(RS_AGENT_PROMPT) if self.mode == RunMode.NO_SKILL else RS_AGENT_PROMPT
+        system_prompt = RS_AGENT_PROMPT
         if self.llm is None:
             self.llm = LocalLLM(str(self.config.pretrained_path), system_prompt=system_prompt)
         elif hasattr(self.llm, "system_prompt"):
@@ -1352,14 +779,6 @@ class AgentRunner:
         if self.tool_manager is None:
             self.tool_manager = ToolManager(controller_url_location=self.config.controller_url_location)
         return self.tool_manager
-
-    def _is_tool_available(self, tool_name: str) -> bool:
-        manager = self._get_tool_manager()
-        return (
-            tool_name in getattr(manager, "available_tools", [])
-            or tool_name in getattr(manager, "available_online_tools", [])
-            or tool_name in getattr(manager, "available_offline_tools", [])
-        )
 
     @staticmethod
     def _append_feedback(

@@ -23,7 +23,6 @@ class TaskArguments:
     resume_from_ckpt: Optional[str] = field(default=None,)
     save_to_ckpt: Optional[str] = field(default=None,)
     task_type: Optional[str] = field(default="e2e")
-    skill_mode: Optional[str] = field(default="no_skill")
     cache_dir: Optional[str] = field(default=None,)
     save_dir: Optional[str] = field(default=None,)
 

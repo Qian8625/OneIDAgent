@@ -23,7 +23,6 @@ from .utils.arguments import *
 from .utils.log_utils import get_logger, set_verbosity
 # from .utils.evaluate import evaluate_metric
 from .tool_inferencer import BaseToolInferencer
-from .utils.rs_agent_prompt import RS_AGENT_PROMPT, build_no_skill_prompt
 import pdb
 import re
 import os 
@@ -43,12 +42,7 @@ class TFEvaluator():
         self.task_args = task_args
         self.script_args = script_args
         self.tasks = self.task_args.task_name
-        self.skill_mode = str(getattr(self.task_args, "skill_mode", "no_skill") or "no_skill")
-        if self.skill_mode not in {"no_skill", "auto_skill"}:
-            raise ValueError("Unsupported skill_mode: %s. Expected one of: no_skill, auto_skill" % self.skill_mode)
         self.model = get_model(self.model_args.model)(**self.model_args.model_args)
-        if self.skill_mode == "no_skill" and hasattr(self.model, "system_prompt"):
-            self.model.system_prompt = build_no_skill_prompt(RS_AGENT_PROMPT)
         max_rounds = self.model_args.max_rounds
         stop_token = self.model_args.stop_token
         print(self.model,self.tasks,self.script_args)
@@ -63,7 +57,6 @@ class TFEvaluator():
             controller_addr = self.script_args.controller_addr,
             cache_dir=self.task_args.cache_dir,
             save_dir=self.task_args.save_dir,
-            disable_skills=(self.skill_mode == "no_skill"),
         )
         print("initializing evaluator done")
 

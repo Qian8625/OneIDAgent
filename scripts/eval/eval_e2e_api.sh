@@ -42,8 +42,6 @@ BATCH_SIZE=${BATCH_SIZE:-1}
 
 MAX_ROUNDS=${MAX_ROUNDS:-15}
 
-SKILL_MODE=${SKILL_MODE:-no_skill}
-
 CONTROLLER_ADDR=${CONTROLLER_ADDR:-http://0.0.0.0:20001}
 
 RESULT_NAME=${RESULT_NAME:-${EVAL_MODEL_NAME//\//_}}
@@ -117,8 +115,6 @@ python -m tool_server.tf_eval \
   --task_name rsagent \
 
   --task_type e2e \
-
-  --skill_mode "${SKILL_MODE}" \
 
   --verbosity INFO \
 

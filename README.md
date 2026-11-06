@@ -265,6 +265,8 @@ python tool_server/tool_workers/online_workers/CrossModalInterpret_worker.py \
 
 The repository ships no imagery, detections or ground truth. Evaluation data is expected under one directory:
 
+**Download.** The evaluation data — paired imagery, tool outputs and frozen ground truth — is shared as a Baidu Pan archive: <https://pan.baidu.com/s/1cXWkqV0D3KcYfS7IKqY5lQ?pwd=kjwi> (passcode `kjwi`). Unpack it so that the archive root matches the tree below, then point `ONEID_DATA_ROOT` at it.
+
 ```
 $ONEID_DATA_ROOT/
 ├── match_images/
@@ -407,6 +409,7 @@ OneID 是面向光学（RGB）/ SAR 双源遥感影像的智能体解译系统�
 核心假设是「一个观测，一个身份」：同一检测产生的所有 claim 共享一个隐身份，矛盾证据可以整体改写身份，而不会把同一目标拆到两个对象上。
 
 - **仓库不含**任何影像、检测结果、真值或模型权重；数据按 `ONEID_DATA_ROOT` 组织。
+- **数据下载**：[百度网盘](https://pan.baidu.com/s/1cXWkqV0D3KcYfS7IKqY5lQ?pwd=kjwi)，提取码 `kjwi`；解压后的根目录即 `$ONEID_DATA_ROOT`。
 - **工具服务必须先启动**：`python tool_server/tool_workers/scripts/launch_scripts/start_server_local.py --config …`
 - **快速自测**：`python scripts/tools_test/0_tools_test_all.py --all`
 - **契约测试**：`python scripts/ci/run_contract_tests.py`；**引擎自测**：`pytest -q DS_VI/tests -k "not opt"`

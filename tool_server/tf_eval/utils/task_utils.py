@@ -1,9 +1,15 @@
+import os
 from .utils import *
 from box import Box
         
 def load_task_config(file_path):
     task_config = load_yaml_file(file_path)
     task_config = Box(task_config)
+    # Ablation hook: let one process point the rsagent task at a subset file
+    # (e.g. test_task4.jsonl) without editing config.yaml.
+    _override = (os.environ.get("ONEID_DATASET_PATH") or "").strip()
+    if _override:
+        task_config["dataset_path"] = _override
     return task_config
 
 def load_data_function_default(task_config):

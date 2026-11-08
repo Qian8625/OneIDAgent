@@ -1,0 +1,43 @@
+{
+  "f_online": {
+    "note": "shipped online config; contextual reliability off (this is what Table 1 ran)",
+    "overrides": {},
+    "path": "/home/ubuntu/01_Code/03_OneIDAgent/scripts/exp/arms/f_online.yaml"
+  },
+  "f_ctx": {
+    "note": "paper default F: contextual reliability on with the fitted theta artifact",
+    "overrides": {
+      "reliability.contextual.enabled": true,
+      "reliability.contextual.theta_path": "DS_VI/configs/shared_identity/artifacts/contextual_theta_v1.json"
+    },
+    "path": "/home/ubuntu/01_Code/03_OneIDAgent/scripts/exp/arms/f_ctx.yaml"
+  },
+  "f_ctx_nobudget": {
+    "note": "F minus provenance budgeting (paper F-P)",
+    "overrides": {
+      "reliability.contextual.enabled": true,
+      "reliability.contextual.theta_path": "DS_VI/configs/shared_identity/artifacts/contextual_theta_v1.json",
+      "provenance.budget_enabled": false,
+      "provenance.group_budget": 1.0
+    },
+    "path": "/home/ubuntu/01_Code/03_OneIDAgent/scripts/exp/arms/f_ctx_nobudget.yaml"
+  },
+  "f_ctx_nocap": {
+    "note": "F minus capacity / null projection (paper J+ rung)",
+    "overrides": {
+      "reliability.contextual.enabled": true,
+      "reliability.contextual.theta_path": "DS_VI/configs/shared_identity/artifacts/contextual_theta_v1.json",
+      "inference.capacity_projection": false
+    },
+    "path": "/home/ubuntu/01_Code/03_OneIDAgent/scripts/exp/arms/f_ctx_nocap.yaml"
+  },
+  "f_ctx_nofeedback": {
+    "note": "F with truth->association feedback damped to 0 (prior-only A)",
+    "overrides": {
+      "reliability.contextual.enabled": true,
+      "reliability.contextual.theta_path": "DS_VI/configs/shared_identity/artifacts/contextual_theta_v1.json",
+      "inference.feedback_damping": 0.0
+    },
+    "path": "/home/ubuntu/01_Code/03_OneIDAgent/scripts/exp/arms/f_ctx_nofeedback.yaml"
+  }
+}

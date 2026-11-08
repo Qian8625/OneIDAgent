@@ -17,7 +17,6 @@ _DEFAULT_ENV = {
     "GRADIO_TEMP_DIR": "app/gradio_tmp",
     "PRETRAINED_PATH": "${CHECKPOINT_ROOT}/OpenEarthAgent",
     "BASE_MODEL_PATH": "${CHECKPOINT_ROOT}/Qwen2.5-VL-3B-Instruct",
-    "TRAIN_MODEL_PATH": "${CHECKPOINT_ROOT}/Qwen3-VL-4B-Instruct",
     "LOGO_PATH": "",
     "QGIS_PREFIX_PATH": "../../miniconda3/envs/tool1",
     "SAR_TO_RGB_MODEL_PATH": "${LOCAL_MODEL_ROOT}/Seg-CycleGAN/175_net_G_A.pth",

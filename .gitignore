@@ -18,7 +18,6 @@ __pycache__/
 *.egg-info/
 build/
 dist/
-unsloth_compiled_cache/
 
 # Virtual environments
 .venv/
@@ -48,6 +47,7 @@ tools_guide/
 /database/
 
 # Model checkpoints / weights
+/cpk/
 /sft_train/
 *.pt
 *.pth
@@ -95,3 +95,8 @@ tools_output/
 
 # Manuscript PDFs are not distributed (double-blind review).
 docs/*.pdf
+
+# Local scratch, one-off probes and pre-ablation backups (never committed)
+/tmp/
+/probe*.py
+*.bak_*

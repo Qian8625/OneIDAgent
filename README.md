@@ -21,7 +21,7 @@ OneID is an agent-based interpretation system for paired optical (RGB) and SAR r
 
 The design follows one rule: **one observation, one identity**. Every claim extracted from a detection — existence, size, position, category — hangs on a single latent identity, so contradicting evidence revises that identity and moves all of its claims together instead of silently splitting one detection across two objects. Physical candidate constraints bound the admissible associations, and provenance budgets stop related tool reports from dominating the vote.
 
-This repository contains the agent runtime, the tool service, the DS+VI engine, a Gradio UI, evaluation and fine-tuning scripts, and the frozen ground-truth protocol behind the reported numbers. It ships **no imagery, detections or ground truth**.
+This repository contains the agent runtime, the tool service, the DS+VI engine, a Gradio UI, evaluation scripts, and the frozen ground-truth protocol behind the reported numbers. It ships **no imagery, detections or ground truth**.
 
 <p align="center">
   <img src="assets/samples/match_rgb.jpg" width="330" alt="Optical view of a harbour">
@@ -39,7 +39,7 @@ This repository contains the agent runtime, the tool service, the DS+VI engine, 
 
 ## 📢 Latest Updates
 
-- **Nov-05-2026** Initial release: agent runtime, tool service (20 online tools + 2 in-process GeoTIFF tools), DS+VI engine, Gradio UI, CLI chat loop, evaluation and SFT scripts.
+- **Nov-05-2026** Initial release: agent runtime, tool service (20 online tools + 2 in-process GeoTIFF tools), DS+VI engine, Gradio UI, CLI chat loop and evaluation scripts.
 - **Nov-05-2026** Ground-truth construction frozen in [`scripts/eval/gt_protocol.py`](scripts/eval/gt_protocol.py) (`GT_PROTOCOL_VERSION = "1.0"`); the version is stamped into every evaluation run.
 - **Nov-05-2026** Contract tests, three end-to-end suites and the tool-smoke harness added; `tool → controller → worker` is exercised over real HTTP.
 
@@ -151,7 +151,6 @@ Two moving parts have to be running: the **tool service** (controller plus one w
 | `tool1` | core workers (`BaseModel`, `TextToBbox`, `SegmentObjectPixels`, `CrossModalInterpret`) and the GIS stack | `requirements/tool_server_e1_requirements.txt` |
 | `tool2` | `ChangeDetection` | `requirements/tool_server_e2_requirements.txt` |
 | `tool3` | `ObjectDetection`, `SmallObjectDetection` | `requirements/tool_server_e3_requirements.txt` |
-| `train` | LoRA fine-tuning with Unsloth + TRL | `requirements/train_requirements.txt` |
 
 `tool1` / `tool2` / `tool3` are the names the launch config passes to `conda run`. Keep them, or edit `conda_env` in the YAML.
 
@@ -317,27 +316,6 @@ python scripts/eval/eval_multisource_detection.py \
 ```
 
 Ground-truth construction is frozen in `scripts/eval/gt_protocol.py` and stamped into every run as `gt_protocol_version`: two runs on the same input must produce identical metrics apart from `run_id`.
-
----
-
-## 🚀 Training
-
-We provide a LoRA SFT pipeline for structured planning and tool invocation, built on Unsloth + TRL. A 4-bit base model, rank-16 adapters and the Qwen3 chat template are the defaults.
-
-```bash
-conda create -n train python=3.10 -y
-conda activate train
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-pip install -r requirements/train_requirements.txt
-```
-
-Edit the paths at the top of [`scripts/train/train.sh`](scripts/train/train.sh) (`MODEL_PATH`, `DATA_PATH`, `OUTPUT_DIR`, GPU count), then:
-
-```bash
-bash scripts/train/train.sh
-```
-
-The dataset is a JSON file whose records carry a `conversation` list of `{"from": "human" | "gpt", "value": ...}` turns; the script prepends the shared remote-sensing system prompt, converts to ShareGPT format and trains on responses only. `data/train.json` is the expected location.
 
 ---
 

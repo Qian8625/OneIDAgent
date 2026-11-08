@@ -20,8 +20,7 @@ apply and you are responsible for complying with them:
 
 - detection / segmentation / change-detection checkpoints referenced by
   `tool_server/utils/paths.py` (`OBJECT_DETECTION_*`, `SAM_*`, `TEXT_TO_BBOX_*`,
-  `SAR_TO_RGB_MODEL_PATH`, `CHANGE_DETECTION_MODEL_BASE`, `BASE_MODEL_PATH`,
-  `TRAIN_MODEL_PATH`);
+  `SAR_TO_RGB_MODEL_PATH`, `CHANGE_DETECTION_MODEL_BASE`, `BASE_MODEL_PATH`);
 - language / vision-language models used as agents (`PRETRAINED_PATH`);
 - geospatial base layers, tile services and any data placed under
   `ONEID_DATA_ROOT`.

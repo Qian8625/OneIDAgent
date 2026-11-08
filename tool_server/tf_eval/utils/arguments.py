@@ -2,8 +2,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, List, Sequence
 from torch.utils.data import Dataset
 import transformers
-from transformers import TrainerCallback
-from transformers import HfArgumentParser, TrainingArguments
+from transformers import HfArgumentParser
 from box import Box
 
 from .utils import *

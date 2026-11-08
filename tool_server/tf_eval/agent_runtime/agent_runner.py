@@ -15,6 +15,7 @@ from tool_server.tf_eval.agent_runtime.trace_schema import AgentTrace, create_ag
 from tool_server.tf_eval.utils.rs_agent_prompt import RS_AGENT_PROMPT
 from tool_server.tool_workers.tool_manager.base_manager import ToolManager
 from tool_server.tool_workers.cross_modal_evidence import (
+    enrich_detection_response,
     filter_detection_response,
     EXAMPLE_BBOX_PATTERNS,
     dependency_hint,
@@ -716,6 +717,8 @@ class AgentRunner:
             trace["tool_time"] += elapsed
 
             tool_resp = coerce_business_negative_response(normalize_tool_response(raw_tool_resp, api_name), api_name)
+            # 先补齐 text-only 检测（带原始 index），再按类过滤，否则下标被打乱。
+            tool_resp = enrich_detection_response(tool_resp, api_name)
             tool_resp = filter_detection_response(tool_resp, api_name, injected_args)
             ok = tool_resp.get("error_code") == 0
             if not ok:

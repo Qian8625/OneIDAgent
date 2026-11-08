@@ -172,6 +172,57 @@ def _requested_targets(api_name: str, api_args: Any) -> set:
     return {_canonical_label(part) for part in parts}
 
 
+def parse_text_detections(text: Any) -> List[Dict[str, Any]]:
+    """Parse the workers' textual detection lines into structured detections.
+
+    Detection workers return ``"(x1, y1, x2, y2), label, score 0.91"`` lines and
+    no ``structured`` payload.  The evidence pipeline needs ``bbox``/``label``/
+    ``score`` dicts, so this is the one place that turns the shipped text format
+    into data; without it a live detection can never be registered and
+    ``CrossModalInterpret`` is always rejected as ``invalid_dependency``.
+    """
+    detections: List[Dict[str, Any]] = []
+    for line in str(text or "").splitlines():
+        match = _LINE_RE.match(line.strip())
+        if not match:
+            continue
+        detections.append({
+            "bbox": [int(match.group(1)), int(match.group(2)), int(match.group(3)), int(match.group(4))],
+            "label": match.group(5).strip(),
+            "score": float(match.group(6)),
+        })
+    return detections
+
+
+_DETECTION_TOOLS = ("ObjectDetection", "SmallObjectDetection", "TextToBbox", "DenoDetV2")
+
+
+def enrich_detection_response(tool_resp: Any, api_name: str) -> Any:
+    """Give a text-only detection response a structured, index-bearing payload.
+
+    Workers answer with ``"(x1, y1, x2, y2), label, score s"`` lines only.  The
+    evidence pipeline (and workbook replay's positional binding) needs
+    ``bbox``/``label``/``score``/``index`` dicts.  Enrichment must happen
+    **before** :func:`filter_detection_response`, otherwise the class filter
+    renumbers the boxes and every replay binding misses.
+    """
+    if api_name not in _DETECTION_TOOLS or not isinstance(tool_resp, dict):
+        return tool_resp
+    if tool_resp.get("error_code") != 0:
+        return tool_resp
+    if isinstance(tool_resp.get("detections"), list) and tool_resp["detections"]:
+        return tool_resp
+    parsed = parse_text_detections(tool_resp.get("text"))
+    if not parsed:
+        return tool_resp
+    enriched = dict(tool_resp)
+    enriched["detections"] = parsed
+    structured = dict(enriched["structured"]) if isinstance(enriched.get("structured"), dict) else {}
+    structured.setdefault("detections", parsed)
+    enriched["structured"] = structured
+    return enriched
+
+
 def filter_detection_response(tool_resp: Dict[str, Any], api_name: str, api_args: Any) -> Dict[str, Any]:
     """Keep only boxes of the class the tool was asked for.
 
@@ -181,6 +232,8 @@ def filter_detection_response(tool_resp: Dict[str, Any], api_name: str, api_args
     """
     if api_name not in _TARGET_FILTER_TOOLS or not isinstance(tool_resp, dict):
         return tool_resp
+    # 文本型检测响应先补齐成结构化检测；放在过滤之前，避免过滤重排这里之后的顺序。
+    tool_resp = enrich_detection_response(tool_resp, api_name)
     targets = _requested_targets(api_name, api_args)
     if not targets:
         return tool_resp
@@ -322,7 +375,9 @@ __all__ = [
     "contains_example_bbox",
     "dependency_hint",
     "detection_modality",
+    "enrich_detection_response",
     "extract_detections",
+    "parse_text_detections",
     "filter_detection_response",
     "prepare_interpret_args",
     "register_detections",

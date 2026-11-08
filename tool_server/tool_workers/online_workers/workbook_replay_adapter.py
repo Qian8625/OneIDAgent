@@ -18,6 +18,7 @@ drifted so far that no bound box overlaps at all fails explicitly.
 """
 import hashlib
 import json
+import os
 from collections import Counter
 from pathlib import Path
 from tool_server.tool_workers.workbook_replay import ATTRIBUTES, ReplayError, load_property_workbook
@@ -122,6 +123,14 @@ def interpret(interpreter, params):
     built = build_observations(pair, detections, config, family)
     claims, context, snapshot, mapping, counts = {}, {}, {}, [], Counter()
     binding = {"bound": 0, "unbound_live": 0, "unbound_workbook": 0, "ious": []}
+    # 位置绑定假定了"检测器跨运行输出顺序稳定"。同一模型重跑时分数会有 ~1e-3 抖动，
+    # 近似并列的框会互换位置，于是 (view, index) 绑不上。默认仍是纯位置绑定；
+    # 显式设置 ONEID_REPLAY_BINDING=iou_assisted 时，位置绑定失配的框改用
+    # 同视图、未占用、IoU 最高的行（阈值 0.5），并在诊断里如实记账。
+    binding_mode = os.environ.get("ONEID_REPLAY_BINDING", "positional").strip().lower()
+    assist_iou = 0.5
+    used_rows = {view: set() for view in ("a", "b")}
+    assisted = 0
     for view in ("a", "b"):
         rows = replay["attributes"][view]
         # Positional binding: ``instance_id`` freezes a box's index in the raw
@@ -131,10 +140,25 @@ def interpret(interpreter, params):
         for det in detections[view]:
             oid = built["by_view_index"][(view, det["index"])]
             row = rows.get(det["index"])
+            row_key = det["index"]
+            if binding_mode == "iou_assisted" and rows:
+                positional_iou = _bbox_iou(row["bbox"], det["bbox"]) if row is not None else 0.0
+                if row is None or positional_iou < assist_iou or row_key in used_rows[view]:
+                    best_key, best_iou = None, 0.0
+                    for candidate_key, candidate in rows.items():
+                        if candidate_key in used_rows[view]:
+                            continue
+                        candidate_iou = _bbox_iou(candidate["bbox"], det["bbox"])
+                        if candidate_iou > best_iou:
+                            best_key, best_iou = candidate_key, candidate_iou
+                    if best_key is not None and best_iou >= assist_iou:
+                        row, row_key = rows[best_key], best_key
+                        assisted += 1
             if row is None:
                 binding["unbound_live"] += 1
                 mapping.append(dict(observation_id=oid, index=det["index"], view=view, attribute_source="none"))
                 continue
+            used_rows[view].add(row_key)
             iou = _bbox_iou(row["bbox"], det["bbox"])
             for attribute, value in row["attributes"].items():
                 if value not in shared["value_domains"].get(attribute, []):
@@ -150,7 +174,9 @@ def interpret(interpreter, params):
     binding["snapshot_rows"] = dict(replay["instance_counts"])
     binding["live_payload"] = {view: len(raw[view]) for view in ("a", "b")}
     binding["live_target_payload"] = {view: len(detections[view]) for view in ("a", "b")}
-    binding["binding_mode"] = "positional_index"
+    binding["binding_mode"] = "iou_assisted" if binding_mode == "iou_assisted" else "positional_index"
+    if binding_mode == "iou_assisted":
+        binding["iou_assisted_bindings"] = assisted
     binding["live_detections"] = {"a": len(detections["a"]), "b": len(detections["b"])}
     binding["workbook_target_rows"] = {view: len(rows) for view, rows in replay["attributes"].items()}
     binding["unmapped_labels"] = unmapped

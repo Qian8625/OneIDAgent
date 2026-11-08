@@ -86,3 +86,64 @@ output (the contract suite asserts this for one payload).
   with "proj.db not found".
 - `DS_VI/tests/opt/` needs PyTorch; it is excluded with `-k "not opt"` on
   CPU-only machines.
+
+
+## Workbook attribute replay
+
+Replay is a **hybrid** run: detection is live, attributes come from the frozen
+workbook. `ObjectDetection` / `DenoDetV2` produce the boxes, labels and scores
+through the normal registry gate (exactly like online); the workbook contributes
+only the requested target's `subtype` / `color` / `size_bin` / `orientation`
+(plus the acquisition `visibility` context). No box, score, pairing, change
+label or selection is read from the workbook. Start the worker with:
+
+```bash
+export ONEID_ENABLE_WORKBOOK_REPLAY=1
+export ONEID_DATA_ROOT=/home/ubuntu/00_Data/RSTI
+```
+
+The server reads only tool_task4_property.xlsx or tool_task5_property.xlsx from
+that root. An optional ONEID_REPLAY_CONFIG server JSON allowlists root-relative
+paths with a datasets mapping, for example
+`{"datasets": {"task4": "tool_task4_property.xlsx", "task5": "tool_task5_property.xlsx"}}`.
+The request cannot supply a workbook path or override inference configuration.
+
+Run the detectors on the pair's images first, then request:
+
+```json
+{"source_mode":"workbook_replay","dataset_id":"task4","family":"match","pair_id":"task4_000001","target":"harbor","task":"joint_scene","output_mode":"full","rgb_detections":[...],"sar_detections":[...],"evidence_provenance":{...}}
+```
+
+Task5 uses the same shape with `dataset_id=task5`, `family=time` and
+`task=temporal_changes` (the two detection arrays carry the time1 / time2 boxes).
+
+Binding rule: an `instance_id` ends with the 0-based position of the box in the
+raw detector JSON order for its view (`task4_000001:rgb:0007`), and the staging
+step keeps that same position as `detection["index"]`. A live box therefore
+binds to the workbook row with the same `(view, index)` — positional binding, no
+geometric threshold. The frozen row bbox is kept only to *audit* the binding:
+`replay_diagnostics.attribute_binding` reports bound / unbound counts, the min
+IoU, how many bound boxes fall below 0.5 IoU, and how the snapshot's row count
+compares with the live payload (`snapshot_rows`, `live_payload`,
+`index_space_matches` — equal lengths do not prove the order is shared, but a
+difference proves it is not). A run where nothing binds by index, or where no
+bound box overlaps at all, fails instead of mis-attributing attributes.
+
+Only rows of the requested target are read. Other classes are skipped without
+being validated — their category vocabulary and attribute values are not this
+mode's business — while box and dimension checks stay global, because they tie
+the whole sheet to the pair's rasters. Identities, is_real_object, association_score and temporal answers are never
+injected, and no truth workbook is opened. Empty attributes do not become
+unknown claims — an empty attribute row, or a live box with no workbook row at
+its index, simply carries no attribute evidence. Visibility is recorded as
+observation context, but contextual theta is disabled. Fixed reliability
+settings are experimental priors, not calibrated claims about these workbook
+versions. Calibrate on a separate split before reporting results.
+
+Outputs identify the workbook SHA256, dataset/pair, live detection counts,
+binding counts and frozen configuration hashes. Full mode includes the
+instance-to-observation binding map, attribute claims, context and attribute
+posteriors. Time results derive change labels from the live t0/t1 geometry with
+identity registration; inputs must already be aligned. Missing detectors,
+target-less detections, a drifted snapshot or malformed attributes fail
+explicitly, never silently fall back to an attribute-free estimator.

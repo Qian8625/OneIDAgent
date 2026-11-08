@@ -73,6 +73,51 @@ from tool_server.tool_workers.online_workers import ds_vi_adapter  # noqa: E402
 #: 在线默认 mode。``ONEID_DEFAULT_MODE=legacy_hard`` 可一键回退。
 DEFAULT_MODE = os.environ.get("ONEID_DEFAULT_MODE", CrossModalInterpreter.MODE_SHARED_IDENTITY)
 
+#: Ablation override.  When set, the chain behind CrossModalInterpret is forced
+#: and any ``mode`` the model puts in the tool arguments is ignored, so an arm is
+#: selected by environment only and the prompt / schema / checkpoint stay fixed.
+#: Unset -> identical behaviour to before this patch.
+FORCE_MODE = (os.environ.get("ONEID_FORCE_MODE") or "").strip() or None
+
+#: Optional jsonl path: one record per tool call.  Used to measure how often the
+#: module actually runs (exposure rate) and whether a call silently degraded.
+ARM_LOG = (os.environ.get("ONEID_ARM_LOG") or "").strip() or None
+
+ARM_LOG_FIELDS = (
+    "requested_mode", "effective_mode", "degraded", "degrade_reason",
+    "status", "task", "target", "count", "payload_bytes",
+)
+
+
+def _log_arm_call(params: Dict[str, Any], response: Dict[str, Any]) -> None:
+    """Append one line per CrossModalInterpret call.  Never raises."""
+    if not ARM_LOG:
+        return
+    try:
+        import time
+
+        _parent = os.path.dirname(ARM_LOG)
+        if _parent:
+            os.makedirs(_parent, exist_ok=True)
+        structured = response.get("structured")
+        structured = structured if isinstance(structured, dict) else {}
+        rec = {
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "requested_mode": params.get("mode"),
+            "effective_mode": response.get("mode"),
+            "degraded": bool(response.get("degraded")),
+            "degrade_reason": response.get("degrade_reason"),
+            "status": response.get("status"),
+            "task": params.get("task"),
+            "target": params.get("target"),
+            "count": structured.get("count"),
+            "payload_bytes": structured.get("payload_bytes"),
+        }
+        with open(ARM_LOG, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:  # pragma: no cover - logging must never break the tool
+        pass
+
 #: 单次推理预算，供适配器在阶段边界降级。
 DEFAULT_BUDGET_SECONDS = float(os.environ.get("ONEID_DSVI_BUDGET_SECONDS", "120") or 120)
 
@@ -84,6 +129,7 @@ STRUCTURED_KEYS = (
     "scene_description", "primitive_observations", "claims", "object_hypotheses",
     "candidate_edges", "physical_prior", "evidence_summary", "inference",
     "legacy_match", "evidence_layer_error",
+    "source_mode", "family", "dataset_id", "pair_id", "replay_provenance", "replay_diagnostics", "objects", "attribute_claims", "observation_context", "vi_objects",
 )
 
 #: 在线能力边界：对模型和下游都必须可见。
@@ -130,6 +176,8 @@ class OneIDCrossModalEngine:
         return self.interpreter.DEFAULT_DETECTION_CONFIDENCE
 
     def canonical_mode(self, params: Dict[str, Any]) -> str:
+        if FORCE_MODE:
+            return self.interpreter.canonical_mode(FORCE_MODE)
         requested = params.get("mode") or params.get("reasoning_mode") or DEFAULT_MODE
         return self.interpreter.canonical_mode(requested)
 
@@ -224,7 +272,7 @@ class OneIDCrossModalEngine:
                 "conclusion_type": response.get("conclusion_type"),
                 "final_bbox": response.get("final_bbox"),
                 "selected_targets": response.get("selected_targets"),
-                "capability": dict(CAPABILITY),
+                "capability": dict(response.get("capability") or CAPABILITY),
             })
             for key in STRUCTURED_KEYS:
                 if key in response:
@@ -253,6 +301,28 @@ class OneIDCrossModalEngine:
     # -- 入口 ------------------------------------------------------------
 
     def generate(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        if FORCE_MODE:
+            params = dict(params)
+            params["mode"] = self.canonical_mode(params)
+            params.pop("reasoning_mode", None)
+        response = self._dispatch(params)
+        _log_arm_call(params, response)
+        return response
+
+    def _dispatch(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        if params.get("source_mode") == "workbook_replay":
+            from tool_server.tool_workers.online_workers import workbook_replay_adapter
+            try:
+                response = workbook_replay_adapter.interpret(self.interpreter, params)
+            except Exception as exc:
+                response = self.interpreter.error_response(str(exc), 2, "replay_error", str(exc))
+                response.update(source_mode="workbook_replay", degraded=False)
+            result = self._finalize(response, params, "shared_identity")
+            if response.get("capability"):
+                result["structured"]["capability"] = response["capability"]
+            return result
+        if params.get("source_mode") not in (None, "online"):
+            return self._finalize(self.interpreter.error_response("Unsupported source_mode", 2, "invalid_request", "source_mode"), params, "shared_identity")
         mode = self.canonical_mode(params)
 
         if mode != CrossModalInterpreter.MODE_SHARED_IDENTITY:
@@ -339,7 +409,10 @@ class CrossModalInterpretWorker(BaseToolWorker):
                     "type": "object",
                     "properties": {
                         "target": {"type": "string", "description": "vehicle, tank, ship, aircraft, bridge, or harbor."},
-                        "task": {"type": "string", "description": "crosscheck_exists, select_largest, select_highest_score, joint_scene, or distance_largest_smallest."},
+                        "source_mode": {"type": "string", "enum": ["online", "workbook_replay"], "description": "Explicit server-enabled replay: live detections plus the target's attributes from the frozen property workbook. Default online is unchanged."},
+                        "family": {"type": "string", "enum": ["match", "time"]},
+                        "dataset_id": {"type": "string", "enum": ["task4", "task5"]},
+                        "task": {"type": "string", "description": "crosscheck_exists, select_largest, select_highest_score, joint_scene, or distance_largest_smallest; time workbook replay supports temporal_changes or joint_scene."},
                         "rgb_detections": {"type": "array", "description": "Structured RGB detections from ObjectDetection or similar."},
                         "sar_detections": {"type": "array", "description": "Structured SAR detections from DenoDetV2 or similar."},
                         "rgb_text": {"type": "string", "description": "RGB detection text (requires evidence_provenance)."},

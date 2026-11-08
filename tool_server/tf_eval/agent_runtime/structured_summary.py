@@ -179,5 +179,13 @@ def build_structured_observation(
 
 
 def get_structured_result_for_registry(tool_resp: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    structured = extract_structured_result(tool_resp)
-    return structured or None
+    if not isinstance(tool_resp, dict) or tool_resp.get("error_code") != 0:
+        return None
+    structured = tool_resp.get("structured")
+    result = dict(structured) if isinstance(structured, dict) else {}
+    if not isinstance(structured, dict) and _has_content(structured):
+        result["structured"] = structured
+    for key in KEY_FIELDS:
+        if key != "structured" and _has_content(tool_resp.get(key)):
+            result[key] = tool_resp[key]
+    return result or None

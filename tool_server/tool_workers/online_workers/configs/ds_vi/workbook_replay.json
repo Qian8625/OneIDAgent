@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "reliability_status": "existing_fixed_priors_not_calibrated_for_workbook_replay",
+  "vi_overrides": {
+    "reliability": {
+      "contextual": {
+        "enabled": false
+      }
+    },
+    "provenance": {
+      "grouping_mode": "observation",
+      "group_budget": 1.0
+    },
+    "inference": {
+      "time_invariant_attributes": []
+    },
+    "cascade": {
+      "extra_consistency": {
+        "match": [],
+        "time": []
+      }
+    }
+  },
+  "time_family": {
+    "views": {
+      "a": {
+        "modality": "optical",
+        "time_key": "t0"
+      },
+      "b": {
+        "modality": "optical",
+        "time_key": "t1"
+      }
+    },
+    "image_size": {
+      "mode": "per_image"
+    },
+    "alpha_a": 0.8,
+    "alpha_b": 0.8,
+    "registration": "identity",
+    "association": {
+      "center_scale": 1.5,
+      "gate_score": 0.25
+    },
+    "track_radius_diag_ratio": 1.0
+  }
+}

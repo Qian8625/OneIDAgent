@@ -19,7 +19,7 @@ def test_every_app_registers_and_injects_detections():
     for name in APP_FILES:
         source = _read(name)
         assert "from tool_server.tool_workers.cross_modal_evidence import" in source, name
-        assert 'register_detections(registry, api_name, tool_resp.get("structured"), round_id)' in source, name
+        assert 'register_detections(registry, api_name, tool_resp.get("structured"), round_id, api_args)' in source, name
         assert "prepare_interpret_args(injected_args, registry)" in source, name
         # 陈旧绑定不得再出现
         assert "georef_image" not in source, name
@@ -49,4 +49,19 @@ def test_agent_runner_delegates_to_shared_module():
     source = _read("tool_server/tf_eval/agent_runtime/agent_runner.py")
     assert "from tool_server.tool_workers.cross_modal_evidence import" in source
     assert "def prepare_cross_modal_interpret_args(" not in source
-    assert "register_detections(registry, api_name, structured_result, round_id)" in source
+    assert "register_detections(registry, api_name, structured_result, round_id, api_args)" in source
+
+
+def test_replay_eval_binding_does_not_inject_live_georef():
+    import ast
+    import typing
+    source = _read("tool_server/tf_eval/agent_runtime/agent_runner.py")
+    tree = ast.parse(source)
+    functions = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "inject_runtime_arguments"]
+    ns = {"Dict": typing.Dict, "Any": typing.Any, "Optional": typing.Optional,
+          "TOOL_ARG_BINDINGS": {"CrossModalInterpret": {"georef_image": "optical_image"}},
+          "TOOL_DEFAULT_ARGUMENTS": {}, "GPKG_REQUIRED_TOOLS": set(),
+          "resolve_argument_references": lambda args, registry: args}
+    exec(compile(ast.Module(body=functions, type_ignores=[]), "runner_binding", "exec"), ns)
+    result = ns["inject_runtime_arguments"]("CrossModalInterpret", {"source_mode": "workbook_replay"}, {"optical_image": "/data/rgb.png"}, None)
+    assert result == {"source_mode": "workbook_replay"}

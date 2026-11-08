@@ -15,6 +15,7 @@ from tool_server.tf_eval.agent_runtime.trace_schema import AgentTrace, create_ag
 from tool_server.tf_eval.utils.rs_agent_prompt import RS_AGENT_PROMPT
 from tool_server.tool_workers.tool_manager.base_manager import ToolManager
 from tool_server.tool_workers.cross_modal_evidence import (
+    filter_detection_response,
     EXAMPLE_BBOX_PATTERNS,
     dependency_hint,
     extract_detections as _extract_detections_from_structured,
@@ -288,7 +289,10 @@ def inject_runtime_arguments(
     current_gpkg: Optional[str],
 ) -> Dict[str, Any]:
     merged = dict(api_args or {})
-    for tool_arg, registry_key in TOOL_ARG_BINDINGS.get(api_name, {}).items():
+    # Replay runs live detection through the shared evidence gate, but it still
+    # refuses a request-injected georef image, so no binding may add one.
+    bindings = {} if api_name == "CrossModalInterpret" and merged.get("source_mode") == "workbook_replay" else TOOL_ARG_BINDINGS.get(api_name, {})
+    for tool_arg, registry_key in bindings.items():
         selected, _ = _select_registry_value(registry, registry_key)
         if selected not in [None, ""] and (merged.get(tool_arg) in [None, ""] or api_name == "DenoDetV2" and tool_arg == "image" and registry.get("sar_image")):
             merged[tool_arg] = selected
@@ -421,6 +425,7 @@ def update_registry_with_tool_response(
     api_name: str,
     tool_resp: Dict[str, Any],
     round_id: int,
+    api_args: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     if not isinstance(tool_resp, dict) or tool_resp.get("error_code") != 0:
         registry = dict(registry)
@@ -444,7 +449,7 @@ def update_registry_with_tool_response(
         registry["latest_structured"] = structured_result
         registry["latest_successful_structured"] = structured_result
         registry["latest_structured_provenance"] = provenance
-        registry = register_detections(registry, api_name, structured_result, round_id)
+        registry = register_detections(registry, api_name, structured_result, round_id, api_args)
 
     artifacts = tool_resp.get("artifacts")
     if isinstance(artifacts, list):
@@ -711,6 +716,7 @@ class AgentRunner:
             trace["tool_time"] += elapsed
 
             tool_resp = coerce_business_negative_response(normalize_tool_response(raw_tool_resp, api_name), api_name)
+            tool_resp = filter_detection_response(tool_resp, api_name, injected_args)
             ok = tool_resp.get("error_code") == 0
             if not ok:
                 self._add_error(trace, "tool_error")
@@ -734,7 +740,7 @@ class AgentRunner:
             obs_text = tool_resp.get("text", "")
             if ok and "gpkg" in tool_resp:
                 current_gpkg = tool_resp.get("gpkg")
-            registry = update_registry_with_tool_response(registry, api_name, tool_resp, round_id=round_id)
+            registry = update_registry_with_tool_response(registry, api_name, tool_resp, round_id=round_id, api_args=injected_args)
             structured_observation = build_structured_observation(tool_resp)
             observation_parts = ["OBSERVATION:"]
             if ok:

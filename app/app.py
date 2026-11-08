@@ -18,6 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from tool_server.tool_workers.tool_manager.base_manager import ToolManager
 from tool_server.tool_workers.cross_modal_evidence import (
+    filter_detection_response,
     prepare_interpret_args,
     register_detections,
 )
@@ -643,7 +644,7 @@ def collect_action_input_media(api_args):
 
     return media
 
-def update_registry_with_tool_response(registry, api_name, tool_resp, round_id=None):
+def update_registry_with_tool_response(registry, api_name, tool_resp, round_id=None, api_args=None):
     if not isinstance(tool_resp, dict):
         return registry
 
@@ -678,7 +679,7 @@ def update_registry_with_tool_response(registry, api_name, tool_resp, round_id=N
                 )
 
         # RGB/SAR detection registry: single implementation shared with the eval side.
-        registry = register_detections(registry, api_name, tool_resp.get("structured"), round_id)
+        registry = register_detections(registry, api_name, tool_resp.get("structured"), round_id, api_args)
         # 2) Legacy fallback for raw tools only.
         visual = detect_output_visual(tool_resp)
         if visual:
@@ -984,6 +985,7 @@ def run_agent(user_question, *flat_args):
             raw_tool_resp = {"error_code": -1, "text": f"Tool call failed: {exc}"}
 
         tool_resp = normalize_tool_response(raw_tool_resp, api_name)
+        tool_resp = filter_detection_response(tool_resp, api_name, injected_args)
         obs_text = tool_resp.get("text", "")
         if tool_resp.get("error_code") == 0 and "gpkg" in tool_resp:
             current_gpkg = tool_resp.get("gpkg")
@@ -993,6 +995,7 @@ def run_agent(user_question, *flat_args):
             api_name,
             tool_resp,
             round_id=round_id,
+            api_args=injected_args,
         )
 
         round_media = collect_round_image_media(

@@ -96,11 +96,12 @@ def build_prompt_filtered(condition: str, keep: set) -> str:
         return PROMPTS_FILTERED[key]
 
     lines = build_prompt(condition).splitlines()
+    tool_names = set(harness_arms.bullet_tools(harness_arms.RS_AGENT_PROMPT))
     kept, dropped = [], []
     for line in lines:
         if line.startswith("- "):
             name = line[2:].split(":", 1)[0].strip()
-            if name not in keep:
+            if name in tool_names and name not in keep:
                 dropped.append(name)
                 continue
         kept.append(line)

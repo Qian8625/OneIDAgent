@@ -70,6 +70,14 @@ def test_config() -> None:
 
 
 def test_stats() -> None:
+    keep = {"ObjectDetection", "DenoDetV2", "SmallObjectDetection", "CrossModalInterpret", "Terminate"}
+    filtered = config.build_prompt_filtered("oneid", keep)
+    recipe = config.ONEID_RECIPE.strip().splitlines()
+    check("registry filtering preserves evidence recipe", all(line in filtered for line in recipe))
+    check("registry filtering removes unavailable tools",
+          set(harness_arms.bullet_tools(filtered)) == keep)
+
+
     check("McNemar 完全一致 -> p=1", analyze.mcnemar_exact(0, 0) == 1.0)
     check("McNemar 对称", analyze.mcnemar_exact(2, 9) == analyze.mcnemar_exact(9, 2))
     p = analyze.mcnemar_exact(10, 2)

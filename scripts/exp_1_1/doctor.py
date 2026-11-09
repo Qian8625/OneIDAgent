@@ -126,6 +126,7 @@ def _stack_env() -> Dict[str, str]:
     env = dict(os.environ)
     env.setdefault("ONEID_ENABLE_WORKBOOK_REPLAY", "1")
     env.setdefault("ONEID_REPLAY_BINDING", "iou_assisted")
+    env.setdefault("ONEID_REPLAY_ALLOW_EMPTY_VIEW", "1")
     env.setdefault("ONEID_DATA_ROOT", "/home/ubuntu/00_Data/RSTI")
     env.setdefault("CHECKPOINT_ROOT", "/home/ubuntu/00_CPK")
     bin_dir = ROOT / "outputs/e2e_task45/bin"

@@ -36,7 +36,11 @@ MODEL_ENV: Dict[str, str] = {
 }
 DEFAULT_MODEL: Dict[str, str] = {
     "base": "cpk/base/Qwen3-4B-Instruct-2507",
+<<<<<<< HEAD
     "sft": "cpk/sft/qwen3_4b_rs_text_sft_merged",
+=======
+    "sft": "cpk/sft/qwen3_4b_rs_text_sft_14336",
+>>>>>>> origin/main
 }
 
 NO_TOOL_NOTE = (

@@ -17,6 +17,13 @@ from mmdet.apis import init_detector, inference_detector
 
 from tool_server.tool_workers.online_workers.base_tool_worker import BaseToolWorker
 from tool_server.utils.server_utils import build_logger
+from tool_server.tool_workers.online_workers.probe_bbox_utils import (  # noqa: E402
+    _probe_crop_box,
+    _probe_offset_detections,
+    _safe_source,
+)
+
+
 from tool_server.utils.paths import env_path
 
 
@@ -276,13 +283,48 @@ class DenoDetV2Worker(BaseToolWorker):
             self._apply_classes_to_model(classes)
 
         tmp_path = None
+        probe_meta = None
         try:
             image_path, tmp_path = self._image_to_path(image_input)
+
+            probe_bbox = params.get("bbox")
+            if probe_bbox is not None:
+                from PIL import Image as _Image
+                import tempfile as _tempfile
+                import os as _os
+                with _Image.open(image_path) as _im:
+                    _size = _im.size
+                    try:
+                        _box = _probe_crop_box(probe_bbox, _size)
+                    except ValueError as _exc:
+                        txt_e = f"Invalid bbox: {_exc}"
+                        logger.error(txt_e)
+                        return {"text": txt_e, "error_code": 2}
+                    _crop = _im.convert("RGB").crop(_box)
+                    _fh, _crop_path = _tempfile.mkstemp(prefix="probe_bbox_", suffix=".png")
+                    _os.close(_fh)
+                    _crop.save(_crop_path)
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+                tmp_path = _crop_path
+                image_path = _crop_path
+                probe_meta = {"bbox": list(_box),
+                              "offset": [int(_box[0]), int(_box[1])],
+                              "crop_size": [int(_box[2] - _box[0]), int(_box[3] - _box[1])],
+                              "source_size": [int(_size[0]), int(_size[1])],
+                              "source_image": _safe_source(image_input)}
+                logger.info(f"probe bbox={probe_meta['bbox']} -> crop {probe_meta['crop_size']}")
+
             logger.info(f"Running DenoDetV2 on image={image_path}")
             logger.info(f"box_threshold={box_threshold}, top1={top1}")
 
             result = inference_detector(self.model, image_path)
             detections = self._normalize_result(result)
+            if probe_meta is not None:
+                detections = _probe_offset_detections(detections, probe_meta["offset"][0], probe_meta["offset"][1])
             detections = [det for det in detections if det["score"] >= box_threshold]
 
             if not detections:
@@ -291,6 +333,8 @@ class DenoDetV2Worker(BaseToolWorker):
                 response = {"text": txt_e, "error_code": 4}
                 if return_json:
                     response["data"] = []
+                if probe_meta is not None:
+                    response["probe"] = probe_meta
                 return response
 
             detections.sort(key=lambda item: item["score"], reverse=True)
@@ -319,6 +363,8 @@ class DenoDetV2Worker(BaseToolWorker):
             response = {"text": "\n".join(formatted_lines), "error_code": 0}
             if return_json:
                 response["data"] = formatted_data
+            if probe_meta is not None:
+                response["probe"] = probe_meta
             return response
         except Exception as exc:
             txt_e = f"Error in DenoDetV2: {exc}"

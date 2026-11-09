@@ -101,7 +101,9 @@ def interpret(interpreter, params):
             raise ReplayError("Runtime image does not match frozen workbook sample")
     # Detections come from the live tools, not from the workbook.
     raw = {"a": _live(params, "rgb_detections", "rgb_detection_set"), "b": _live(params, "sar_detections", "sar_detection_set")}
-    if not (raw["a"] and raw["b"]):
+    # 空列表是"该视图零目标"的合法证据（rgb_only / sar_only 的一半语义），
+    # 只有"键缺失"才算没取证。
+    if raw["a"] is None or raw["b"] is None:
         raise ReplayError("Replay needs live detections on both views; the workbook supplies attributes only")
     detections, unmapped = {}, {}
     for key in ("a", "b"):

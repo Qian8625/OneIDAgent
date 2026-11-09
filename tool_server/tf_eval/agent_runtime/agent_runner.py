@@ -16,7 +16,9 @@ from tool_server.tf_eval.utils.rs_agent_prompt import RS_AGENT_PROMPT
 from tool_server.tool_workers.tool_manager.base_manager import ToolManager
 from tool_server.tool_workers.cross_modal_evidence import (
     enrich_detection_response,
+    extract_detections,
     filter_detection_response,
+    register_empty_detection,
     EXAMPLE_BBOX_PATTERNS,
     dependency_hint,
     extract_detections as _extract_detections_from_structured,
@@ -451,6 +453,8 @@ def update_registry_with_tool_response(
         registry["latest_successful_structured"] = structured_result
         registry["latest_structured_provenance"] = provenance
         registry = register_detections(registry, api_name, structured_result, round_id, api_args)
+        if not extract_detections(structured_result):
+            registry = register_empty_detection(registry, api_name, round_id, api_args)
 
     artifacts = tool_resp.get("artifacts")
     if isinstance(artifacts, list):

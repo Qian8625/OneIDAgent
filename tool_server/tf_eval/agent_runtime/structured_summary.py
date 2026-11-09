@@ -154,6 +154,73 @@ def _to_json_text(value: Dict[str, Any]) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
 
 
+#: 体积大、对"下一步决策"几乎没有增量信息的字段：摘要时整体丢弃。
+_HEAVY_KEYS = {
+    "detections", "dedup_detections", "matched_pairs", "objects_used", "objects",
+    "object_hypotheses", "observation_context", "claims", "primitive_observations",
+    "vi_diagnostics", "evidence", "replay_diagnostics", "artifacts", "snapshot",
+}
+
+#: 决策必需的字段：优先保留，且允许单独占额度。
+_PRIORITY_KEYS = (
+    "summary", "source_counts", "count", "dedup_count", "matched_count", "conclusion_type",
+    "final_bbox", "mode", "degraded", "degrade_reason", "family", "pair_id", "target",
+    "attribute_claims", "attributes", "selected", "selected_detections", "measurement", "bbox",
+)
+
+
+def _compact_attribute_claims(claims: Any, max_objects: int = 4, max_claims: int = 8) -> Any:
+    """只留 attribute/value，便于模型直接抄；否则模型会答"无法确定"。"""
+    if not isinstance(claims, dict):
+        return claims
+    out = {}
+    for index, (key, value) in enumerate(claims.items()):
+        if index >= max_objects:
+            break
+        if isinstance(value, list):
+            out[key] = [
+                {"attribute": item.get("attribute"), "value": item.get("value")}
+                for item in value[:max_claims] if isinstance(item, dict)
+            ]
+        else:
+            out[key] = value
+    return out
+
+
+_OBJECT_KEYS = {"label", "bbox", "score", "attributes", "subtype", "color", "size_bin",
+                "orientation", "observation_id", "index", "view"}
+
+
+def _slim_object(obj: Any) -> Any:
+    if not isinstance(obj, dict):
+        return obj
+    return {k: v for k, v in obj.items() if k in _OBJECT_KEYS}
+
+
+def compact_structured(structured: Dict[str, Any]) -> Dict[str, Any]:
+    """按"决策相关性"压缩大 payload，而不是退化成只有键名的骨架。
+
+    之前的兜底是 {"__summary_truncated__": True, "available_keys": [...]}，
+    模型据此只能回答"无法确定"，等于把工具输出丢了。
+    """
+    compact: Dict[str, Any] = {}
+    for key in _PRIORITY_KEYS:
+        if key not in structured:
+            continue
+        value = structured[key]
+        compact[key] = _compact_attribute_claims(value) if key == "attribute_claims" else value
+    # 只留"目标是谁、多大、什么属性"，否则模型无法判断"largest"指向哪个对象。
+    objects = structured.get("objects")
+    if isinstance(objects, list) and objects:
+        compact["objects"] = [_slim_object(item) for item in objects[:5]]
+    for key, value in structured.items():
+        if key in compact or key in _HEAVY_KEYS or key.startswith("__"):
+            continue
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            compact[key] = value
+    return compact
+
+
 def build_structured_observation(
     tool_resp: Dict[str, Any],
     max_chars: int = 5000,
@@ -164,10 +231,14 @@ def build_structured_observation(
 
     json_text = _to_json_text(structured)
     if len(json_text) > max_chars:
-        structured = extract_structured_result(tool_resp, max_list_items=3, max_depth=3)
+        # 先按"决策相关性"压缩，再做深度截断。顺序不能反：先截断会把 attribute_claims
+        # 压成 {"__truncated__": ...} 骨架，模型就只能回答"无法确定"。
+        structured = compact_structured(structured)
         structured["__summary_truncated__"] = True
         json_text = _to_json_text(structured)
-
+    if len(json_text) > max_chars:
+        structured = truncate_structured_value(structured, max_list_items=3, max_depth=3)
+        json_text = _to_json_text(structured)
     if len(json_text) > max_chars:
         structured = {
             "__summary_truncated__": True,

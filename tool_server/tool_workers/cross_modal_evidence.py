@@ -106,6 +106,7 @@ def register_detections(
     structured: Any,
     round_id: Any,
     api_args: Optional[Dict[str, Any]] = None,
+    allow_empty: bool = False,
 ) -> Dict[str, Any]:
     """Record a successful detection tool's output in ``registry``.
 
@@ -118,7 +119,7 @@ def register_detections(
     if modality is None:
         return registry
     detections = extract_detections(structured)
-    if not detections:
+    if not detections and not allow_empty:
         return registry
     registry = dict(registry)
     provenance = build_provenance(api_name, round_id)
@@ -143,6 +144,42 @@ def register_detections(
     else:
         registry[SAR_DETECTIONS_KEY] = detections
         registry[SAR_PROVENANCE_KEY] = provenance
+    return registry
+
+
+EMPTY_VIEWS_KEY = "empty_detection_views"
+
+
+def _view_slot(registry: Dict[str, Any], modality: str, api_args: Optional[Dict[str, Any]]) -> str:
+    """与 register_detections 相同的槽位规则，抽出来供负例复用。"""
+    slot = modality
+    image = str((api_args or {}).get("image") or "")
+    if modality == "rgb" and image:
+        time1 = str(registry.get("time1_image") or "")
+        time2 = str(registry.get("time2_image") or "")
+        if time1 and os.path.realpath(image) == os.path.realpath(time1):
+            slot = "time1"
+        elif time2 and os.path.realpath(image) == os.path.realpath(time2):
+            slot = "time2"
+    return slot
+
+
+def register_empty_detection(registry: Dict[str, Any], api_name: str, round_id: Any,
+                             api_args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """记录"检测器跑过、但该视图没有目标"这一业务负例。
+
+    与 :func:`register_detections` 分开，是因为后者的契约是"只登记检测"：空列表不得
+    产生证据。负例走独立槽位，由 :func:`prepare_interpret_args` 注入成空列表 + provenance，
+    从而让 rgb_only / sar_only 这类题面可被回答。
+    """
+    modality = detection_modality(api_name)
+    if modality is None:
+        return registry
+    registry = dict(registry)
+    slot = _view_slot(registry, modality, api_args)
+    views = dict(registry.get(EMPTY_VIEWS_KEY) or {})
+    views[slot] = build_provenance(api_name, round_id)
+    registry[EMPTY_VIEWS_KEY] = views
     return registry
 
 
@@ -313,10 +350,10 @@ def prepare_interpret_args(
                 args[argument] = registry[key]
         if family == "time":
             replay_provenance = dict(args.get("evidence_provenance") or {})
-            if not args.get("rgb_detections") and registry.get(TIME1_DETECTIONS_KEY):
+            if not args.get("rgb_detections") and registry.get(TIME1_DETECTIONS_KEY) is not None:
                 args["rgb_detections"] = registry[TIME1_DETECTIONS_KEY]
                 replay_provenance["time1"] = registry.get(TIME1_PROVENANCE_KEY)
-            if not args.get("sar_detections") and registry.get(TIME2_DETECTIONS_KEY):
+            if not args.get("sar_detections") and registry.get(TIME2_DETECTIONS_KEY) is not None:
                 args["sar_detections"] = registry[TIME2_DETECTIONS_KEY]
                 replay_provenance["time2"] = registry.get(TIME2_PROVENANCE_KEY)
             if replay_provenance:
@@ -329,19 +366,34 @@ def prepare_interpret_args(
     for argument, alias in (("rgb_detections", "rgb_detection_set"), ("sar_detections", "sar_detection_set")):
         if not args.get(argument) and args.get(alias):
             args[argument] = args.pop(alias)
+    # 模型常把占位符原样写成字符串（"<RGB_DETECTIONS_FROM_PREVIOUS_SUCCESSFUL_TOOL>"）或整段文本。
+    # 非"检测字典列表"的值一律视为没给，交由 registry 注入，否则 provenance 缺失会被门禁拒绝。
+    for key in ("rgb_detections", "sar_detections"):
+        value = args.get(key)
+        if value is not None and not (isinstance(value, list) and all(isinstance(item, dict) for item in value)):
+            args.pop(key)
     provenance = dict(args.get("evidence_provenance") or {})
-    if not args.get("rgb_detections") and registry.get(RGB_DETECTIONS_KEY):
+    if not args.get("rgb_detections") and registry.get(RGB_DETECTIONS_KEY) is not None:
         args["rgb_detections"] = registry[RGB_DETECTIONS_KEY]
         provenance["rgb"] = registry.get(RGB_PROVENANCE_KEY)
-    if not args.get("sar_detections") and registry.get(SAR_DETECTIONS_KEY):
+    if not args.get("sar_detections") and registry.get(SAR_DETECTIONS_KEY) is not None:
         args["sar_detections"] = registry[SAR_DETECTIONS_KEY]
         provenance["sar"] = registry.get(SAR_PROVENANCE_KEY)
+    empty_views = registry.get(EMPTY_VIEWS_KEY) or {}
+    empty_slot_key = {"rgb": "rgb_detections", "sar": "sar_detections",
+                      "time1": "rgb_detections", "time2": "sar_detections"}
+    for slot, key in empty_slot_key.items():
+        if slot in empty_views and key not in args:
+            args[key] = []
+            provenance.setdefault(slot, empty_views[slot])
     if provenance:
         args["evidence_provenance"] = provenance
     if contains_example_bbox(args) and not provenance:
         return args, "example_leakage_detected"
-    has_rgb = bool(args.get("rgb_detections") or args.get("rgb_boxes"))
-    has_sar = bool(args.get("sar_detections") or args.get("sar_candidates") or args.get("sar_boxes"))
+    # 空列表是合法证据（该视图零目标），与"没给证据"靠 provenance 区分：
+    # 只有 registry 注入的证据才带 provenance，手写空列表会被下面的 provenance 检查拒绝。
+    has_rgb = "rgb_detections" in args or bool(args.get("rgb_boxes"))
+    has_sar = "sar_detections" in args or bool(args.get("sar_candidates") or args.get("sar_boxes"))
     if (args.get("rgb_text") or args.get("sar_text")) and not provenance:
         return args, "invalid_dependency"
     if not (has_rgb and has_sar and provenance):
@@ -375,6 +427,8 @@ __all__ = [
     "contains_example_bbox",
     "dependency_hint",
     "detection_modality",
+    "EMPTY_VIEWS_KEY",
+    "register_empty_detection",
     "enrich_detection_response",
     "extract_detections",
     "parse_text_detections",

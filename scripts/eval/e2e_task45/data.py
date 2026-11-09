@@ -34,7 +34,26 @@ _DISTINCT_GT = re.compile(r"(\d+)\s+distinct\s+\w+", re.IGNORECASE)
 _TARGET_A = re.compile(r"to cross-validate\s+(\w+)\s+objects", re.IGNORECASE)
 _TARGET_B = re.compile(r"to compare\s+(\w+)\s+objects", re.IGNORECASE)
 _TARGET_FALLBACK = re.compile(r"largest\s+(?:RGB|time1)\s+(\w+)\s+detection", re.IGNORECASE)
-_ATTR_PAIR = re.compile(r"(subtype|color|size_bin|orientation|visibility)\s*[=:]\s*([A-Za-z_][A-Za-z0-9_-]*)", re.IGNORECASE)
+_ATTR_PAIR = re.compile(
+    r"(subtype|color|size_bin|orientation|visibility)\s*[=:]\s*"
+    r"([A-Za-z_][A-Za-z0-9_/-]*(?:\s+[A-Za-z_][A-Za-z0-9_/-]*){0,3})",
+    re.IGNORECASE,
+)
+
+#: 这些"值"等价于"没有记录"，不能当成属性写错来扣分。
+_NULL_ATTRS = {
+    "n", "na", "n_a", "n.a", "n/a", "n.a.", "none", "null", "nil", "unknown", "unclear", "unspecified",
+    "not_available", "not_recorded", "not_applicable", "unavailable", "not_detected",
+    "not_determined", "not_known", "no_data",
+}
+
+
+def _norm_attr(token: str) -> Optional[str]:
+    """小写、空格转下划线、去掉尾随标点；空值等价物统一成 None。"""
+    text = re.sub(r"\s+", "_", token.strip().lower()).strip("_.,;:")
+    if not text or text in _NULL_ATTRS or not re.search(r"[a-z]", text):
+        return None
+    return text
 _NO_ATTR = re.compile(r"no recorded\s+subtype", re.IGNORECASE)
 
 
@@ -76,7 +95,7 @@ def parse_gt(label: str, family: str) -> Dict[str, Any]:
         for key, value in _ATTR_PAIR.findall(label or ""):
             key = key.lower()
             if key in attributes:
-                attributes[key] = value.lower()
+                attributes[key] = _norm_attr(value)
     return {"counts": counts, "distinct": distinct, "attributes": attributes}
 
 
@@ -98,7 +117,7 @@ def parse_prediction(text: str, family: str) -> Dict[str, Any]:
         for key, value in _ATTR_PAIR.findall(text):
             key = key.lower()
             if key in attributes:
-                attributes[key] = value.lower()
+                attributes[key] = _norm_attr(value)
     return {"counts": counts, "attributes": attributes}
 
 

@@ -16,7 +16,9 @@ from tool_server.tf_eval.utils.rs_agent_prompt import RS_AGENT_PROMPT
 from tool_server.tool_workers.tool_manager.base_manager import ToolManager
 from tool_server.tool_workers.cross_modal_evidence import (
     enrich_detection_response,
+    extract_detections,
     filter_detection_response,
+    register_empty_detection,
     EXAMPLE_BBOX_PATTERNS,
     dependency_hint,
     extract_detections as _extract_detections_from_structured,
@@ -55,11 +57,10 @@ DETERMINISTIC_FAILURE_PATTERNS = (
     "no crs defined",
 )
 
-NO_DETECTION_PATTERNS = (
-    "no detections found",
-    "no detections found after filtering",
-    "no detections found after thresholding",
-)
+# 检测器约定的"业务性无目标"返回码（DenoDetV2 用 4）。判定不再依赖文本。
+NO_DETECTION_ERROR_CODE = 4
+# 统一文案：任何被判定为"无检测"的返回都用这一句，绝不给空字符串
+NO_DETECTION_TEXT = "no detections found after thresholding"
 
 TOOL_DEFAULT_ARGUMENTS = {
     "AddText": {"color": "green"},
@@ -348,8 +349,24 @@ def is_deterministic_failure(tool_resp: Dict[str, Any]) -> bool:
 
 
 def is_no_detection_response(tool_resp: Dict[str, Any]) -> bool:
-    text = str(tool_resp.get("text") or "").lower()
-    return any(pattern in text for pattern in NO_DETECTION_PATTERNS)
+    """按结构与返回码判断"跑完了但一个目标都没有"，不看文案。
+
+    - status == "no_detections"（worker 显式声明）
+    - error_code == 4（检测器的业务性无目标码）
+    - error_code == 0 且 detections 是显式空列表
+    有框、或参数/图像类错误（code 1/2/3）一律不算。
+    """
+    if not isinstance(tool_resp, dict):
+        return False
+    if str(tool_resp.get("status") or "").lower() == "no_detections":
+        return True
+    detections = tool_resp.get("detections")
+    if isinstance(detections, list) and detections:
+        return False
+    code = tool_resp.get("error_code")
+    if code == NO_DETECTION_ERROR_CODE:
+        return True
+    return code == 0 and isinstance(detections, list) and not detections
 
 
 def normalize_tool_response(tool_resp: Any, api_name: str) -> Dict[str, Any]:
@@ -365,14 +382,17 @@ def normalize_tool_response(tool_resp: Any, api_name: str) -> Dict[str, Any]:
 def coerce_business_negative_response(tool_resp: Dict[str, Any], api_name: str) -> Dict[str, Any]:
     if api_name not in {"ObjectDetection", "DenoDetV2", "TextToBbox", "SmallObjectDetection"}:
         return tool_resp
-    if not isinstance(tool_resp, dict) or tool_resp.get("error_code") == 0 or not is_no_detection_response(tool_resp):
+    if not is_no_detection_response(tool_resp):
         return tool_resp
     coerced = dict(tool_resp)
-    coerced["original_error_code"] = coerced.get("error_code")
-    coerced["error_code"] = 0
+    if coerced.get("error_code") != 0:
+        coerced["original_error_code"] = coerced.get("error_code")
+        coerced["error_code"] = 0
     coerced.setdefault("detections", [])
     coerced.setdefault("structured", {"detections": [], "status": "no_detections"})
     coerced["status"] = "no_detections"
+    if not str(coerced.get("text") or "").strip():
+        coerced["text"] = NO_DETECTION_TEXT
     return coerced
 
 
@@ -451,6 +471,8 @@ def update_registry_with_tool_response(
         registry["latest_successful_structured"] = structured_result
         registry["latest_structured_provenance"] = provenance
         registry = register_detections(registry, api_name, structured_result, round_id, api_args)
+        if not extract_detections(structured_result):
+            registry = register_empty_detection(registry, api_name, round_id, api_args)
 
     artifacts = tool_resp.get("artifacts")
     if isinstance(artifacts, list):

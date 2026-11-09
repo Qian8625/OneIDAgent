@@ -29,6 +29,7 @@ CORE_EXPECTED_ONLINE_TOOLS = [
     'SmallObjectDetection',
     'DenoDetV2',
     'CrossModalInterpret',
+    'CropRegion',
 ]
 
 EXPECTED_ONLINE_TOOLS = CORE_EXPECTED_ONLINE_TOOLS

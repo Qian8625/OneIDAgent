@@ -12,7 +12,15 @@ from ultralytics import YOLO
 
 from tool_server.tool_workers.online_workers.base_tool_worker import BaseToolWorker
 from tool_server.utils.server_utils import build_logger
+from tool_server.tool_workers.online_workers.probe_bbox_utils import (  # noqa: E402
+    _probe_crop_box,
+    _probe_offset_detections,
+    _safe_source,
+)
 
+
+# 无检测时统一返回这一句，别再给空字符串（空观测等于没信息）
+NO_DETECTION_TEXT = "no detections found after thresholding"
 
 worker_id = str(uuid.uuid4())[:6]
 logger = build_logger(__file__, f"small_object_detection_worker_{worker_id}.log")
@@ -377,6 +385,23 @@ class SmallObjectDetectionWorker(BaseToolWorker):
             logger.exception(txt_e)
             return {"text": txt_e, "error_code": 3}
 
+        probe_meta = None
+        probe_bbox = params.get("bbox")
+        if probe_bbox is not None:
+            try:
+                _box = _probe_crop_box(probe_bbox, image.size)
+            except Exception as exc:
+                txt_e = f"Invalid bbox: {exc}"
+                logger.error(txt_e)
+                return {"text": txt_e, "error_code": 2}
+            _src_size = [int(image.size[0]), int(image.size[1])]
+            image = image.crop(_box)
+            probe_meta = {"bbox": list(_box),
+                          "offset": [int(_box[0]), int(_box[1])],
+                          "crop_size": [int(image.size[0]), int(image.size[1])],
+                          "source_size": _src_size,
+                          "source_image": _safe_source(image_input)}
+
         top1 = bool(params.get("top1", False))
         score_threshold = float(params.get("score_threshold", 0.25))
         use_tiling = self._coerce_optional_bool(params.get("use_tiling"))
@@ -413,10 +438,13 @@ class SmallObjectDetectionWorker(BaseToolWorker):
 
         if filter_class_ids == []:
             logger.info(f"text filter '{text}' did not map to any supported class")
+            if probe_meta is not None:
+                meta["probe"] = probe_meta
             return {
-                "text": "",
+                "text": NO_DETECTION_TEXT,
                 "error_code": 0,
                 "detections": [],
+                "status": "no_detections",
                 "meta": meta,
             }
 
@@ -446,18 +474,27 @@ class SmallObjectDetectionWorker(BaseToolWorker):
                 max_detections=max_detections,
             )
 
+            if probe_meta is not None:
+                detections = _probe_offset_detections(
+                    detections, probe_meta["offset"][0], probe_meta["offset"][1]
+                )
+                meta["probe"] = probe_meta
+
             text_lines = [
                 f"({bbox[0]}, {bbox[1]}, {bbox[2]}, {bbox[3]}), {det['label']}, score {det['score']:.2f}"
                 for det in detections
                 for bbox in [det["bbox"]]
             ]
 
-            return {
-                "text": "\n".join(text_lines),
+            response = {
+                "text": "\n".join(text_lines) if detections else NO_DETECTION_TEXT,
                 "error_code": 0,
                 "detections": detections,
                 "meta": meta,
             }
+            if not detections:
+                response["status"] = "no_detections"
+            return response
         except Exception as e:
             txt_e = f"Error in SmallObjectDetection: {e}"
             logger.exception(txt_e)

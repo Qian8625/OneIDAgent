@@ -71,7 +71,7 @@ class BaseToolInferencer(object):
             "img_2", "image_2", "tif_2", "sar_image", "$sar_image",
             "time2_image", "$time2_image", "post_image", "$post_image",
         }
-        output_aliases = {"out.tif", "output_image", "$output_image"}
+        output_aliases = {"out.tif", "output_image", "$output_image", "latest_image", "$latest_image"}
 
         if ref is not None and not isinstance(ref, str):
             ref = str(ref)

@@ -48,6 +48,16 @@ tool_worker_config:
         host: "0.0.0.0"
         save_path: ${TOOLS_OUTPUT_DIR}
 
+  - CropRegion:
+      worker_name: CropRegion
+      job_name: crop_region
+      calculate_type: control
+      cmd:
+        script-addr: ${TOOL_WORKERS_DIR}/online_workers/CropRegion_worker.py
+        port: 20040
+        host: "0.0.0.0"
+        save_path: ${TOOLS_OUTPUT_DIR}
+
   - AddText:
       worker_name: AddText
       job_name: add_text
